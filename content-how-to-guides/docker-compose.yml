@@ -1,0 +1,12 @@
+services:
+  browser:
+    profiles:
+      - browser
+    build:
+      context: ./browser
+    volumes:
+      - ./.browser:/output
+    environment:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+    tty: true
+    stdin_open: true
