@@ -1,0 +1,21 @@
+# Add this service to your project's docker-compose.yml
+# Usage: docker compose --profile browser up -d browser
+
+services:
+  browser:
+    profiles:
+      - browser
+    build:
+      context: ./browser
+    volumes:
+      - ./.browser:/output
+    environment:
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+    networks:
+      - shared-network
+    tty: true
+    stdin_open: true
+
+networks:
+  shared-network:
+    driver: bridge
