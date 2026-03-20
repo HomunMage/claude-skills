@@ -43,7 +43,7 @@ allowed-tools: Read, Grep, Bash        # Auto-approved tools
 
 # Body Variables
 
-`$ARGUMENTS` all · `$0 $1 $2` positional · `${CLAUDE_SKILL_DIR}` skill dir · `` !`cmd` `` shell inject
+`$ARGUMENTS` all · `$0 $1 $2` positional · `${CLAUDE_SKILL_DIR}` skill dir · `!cmd` shell inject
 
 # Scope
 
