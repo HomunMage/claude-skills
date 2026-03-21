@@ -35,8 +35,8 @@ YouTube videos use iframe inline within bullet points:
 
 Images use HTML img tags inline within bullet points (never markdown `![]()`):
 ```html
-* topic <img src="./image.webp" width="300">
-* <img src="https://example.com/image.png" height="300" style="background-color: white;">
+* topic <img src="./image.webp" width="450">
+* <img src="https://example.com/image.png" width="450" style="background-color: white;">
 ```
 
 ### Content Guidelines
@@ -46,7 +46,7 @@ Images use HTML img tags inline within bullet points (never markdown `![]()`):
 - Use 2-4 top-level branches from the root
 - Embed media (iframes, images) as leaf nodes or inline with text
 - Deeper nesting (4-5 levels) is fine for detailed sub-topics
-- Use inline `<img>` with `width`/`height` to control size
+- Use inline `<img>` with `width` to control size
 
 ## Example
 
@@ -71,12 +71,12 @@ layout: page/note/markmap
     * comparison detail
     * <img src="https://example.com/diagram.svg" height="300" style="background-color: white;">
   * Concept Z
-    * <img src="./local-image.webp" width="150">
+    * <img src="./local-image.webp" width="450">
 
 * Branch Three
   * Key idea
     * supporting point
     * supporting point
   * Another idea
-    * detail with image <img src="./photo.webp" width="300">
+    * detail with image <img src="./photo.webp" width="450">
 ```

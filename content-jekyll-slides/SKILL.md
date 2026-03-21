@@ -26,18 +26,21 @@ layout: "page/note/slides"
 
 ### Media Embedding
 
+use `max-width:90%`
+
 YouTube videos use iframe (never markdown links):
 ```html
-<iframe width="450" height="255" src="https://www.youtube.com/embed/VIDEO_ID" title="Video Title" frameborder="0" ></iframe>
+<iframe style="max-width:90%; aspect-ratio:16/9;" src="https://www.youtube.com/embed/VIDEO_ID" title="Video Title" frameborder="0" ></iframe>
 ```
 
 Images use HTML img tags (never markdown `![]()`):
 ```html
-<img src="./image.webp" width="500">
-<img src="https://example.com/image.png" height="300">
+<img src="./image.webp" style="max-width:90%; height:auto;">
 ```
 
-Use `width` or `height` attributes to control size. Add `style="background-color: white;"` for images that need a white background.
+Default to `max-width:90%; height:auto` — fits container width and scales on zoom. Add `style="background-color: white;"` if image needs a white background.
+
+**Image format: webp only.** Never use png/jpg in slides. If user provides a png/jpg, ask them to convert it first or run `_layouts/img2webp.sh` to batch-convert.
 
 ### Content Guidelines
 
@@ -77,15 +80,15 @@ Speaker Name
 2. Key Point Two
 3. Key Point Three
 
-<iframe width="450" height="255" src="https://www.youtube.com/embed/VIDEO_ID" title="Reference Video" frameborder="0" ></iframe>
+<iframe style="max-width:90%; aspect-ratio:16/9;" src="https://www.youtube.com/embed/VIDEO_ID" title="Reference Video" frameborder="0" ></iframe>
 
 ## Visual Example
 
-<img src="./example.webp" width="500">
+<img src="./example.webp" style="max-width:90%; height:auto;">
 
 ## References
 
-<iframe width="450" height="255" src="https://www.youtube.com/embed/VIDEO_ID" title="Source Video" frameborder="0" ></iframe>
+<iframe style="max-width:90%; aspect-ratio:16/9;" src="https://www.youtube.com/embed/VIDEO_ID" title="Source Video" frameborder="0" ></iframe>
 
 * [Resource Name](https://url)
 * [Another Resource](https://url)
