@@ -31,6 +31,7 @@ The target project must have:
 3. `.tmp/llm.working.log` — abstract of recent completed work
 4. `.tmp/llm.working.notes` — detailed working notes (if exists)
 5. Any `.tmp/llm*md` files — design docs, API specs, references
+6. **Load all `developing-*` skills** — `Skill(developing-svelte)`, `Skill(developing-db-sql)`, `Skill(developing-programming)`, etc. These contain project coding standards that workers MUST follow.
 
 ### Step 1: Create Worktree Branch
 ```bash

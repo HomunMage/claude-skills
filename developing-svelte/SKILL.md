@@ -81,7 +81,7 @@ Rules:
 1. **New feature?** Start with `.ts` in `src/lib/` — types first, then logic
 2. **Need UI?** Create `.svelte` that imports from `src/lib/`
 3. **Refactoring?** Extract any logic from `<script>` blocks into `src/lib/`
-4. **Testing?** Logic tests = pure TS (vitest). UI tests = component tests only for interaction
+4. **Testing?** Logic tests = pure TS (vitest). UI tests = `Skill(developing-debug-frontend)` — Playwright screenshot, click, inspect
 
 ## $lib Alias
 
