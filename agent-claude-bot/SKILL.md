@@ -13,7 +13,7 @@ Start a tmux-based orchestrator that runs N workers in parallel to solve project
 1. Creates a tmux session named after the project folder
 2. Runs an orchestrator (Haiku) that reads `.tmp/llm.plan.status` and assigns tickets to workers
 3. Spawns N workers (Sonnet) in separate tmux windows
-4. Each worker: git clean → implement ticket → `Skill(developing-programming)` → commit
+4. Each worker: git worktree branch → implement ticket → `Skill(developing-programming)` → commit → merge back
 5. Orchestrator monitors workers (kills if >900s), collects results, loops (50 cycles max)
 
 ## Prerequisites
@@ -32,11 +32,13 @@ The target project must have:
 4. `.tmp/llm.working.notes` — detailed working notes (if exists)
 5. Any `.tmp/llm*md` files — design docs, API specs, references
 
-### Step 1: Clean Slate
+### Step 1: Create Worktree Branch
 ```bash
-git status
-# If there are uncommitted changes → git reset --hard HEAD
+# Create isolated worktree for this ticket
+git worktree add .tmp/worker_{id} -b ticket/{ticket-slug} main
+cd .tmp/worker_{id}
 ```
+Each worker operates in its own worktree — no conflicts, no need for rollback.
 
 ### Step 2: Pick ONE Ticket
 - Read `.tmp/llm.plan.status`
@@ -50,7 +52,15 @@ git status
 ### Step 4: Test, Format, Lint, Commit
 Use `Skill(developing-programming)` — follow developing.md workflow.
 
-### Step 5: Update Status
+### Step 5: Merge & Cleanup
+```bash
+cd <project-root>
+git merge ticket/{ticket-slug}
+git worktree remove .tmp/worker_{id}
+git branch -d ticket/{ticket-slug}
+```
+
+### Step 6: Update Status
 1. Mark the ticket `[x]` in `.tmp/llm.plan.status`
 2. Append a summary to `.tmp/llm.working.log`:
    ```
@@ -62,7 +72,7 @@ Use `Skill(developing-programming)` — follow developing.md workflow.
 - **ONE ticket per session.** Do not batch multiple tickets.
 - **Never ask questions.** Make reasonable decisions and document them in the commit message.
 - **Stay in your assigned scope.** Don't touch files outside your task boundary.
-- **If stuck after 3 attempts:** `git stash`, write BLOCKED to the trigger file, stop.
+- **If stuck after 3 attempts:** write BLOCKED to the trigger file, stop. Worktree can be discarded.
 - **All tests must pass** before committing.
 - **Don't break existing tests.**
 - **Commit messages:** `ticket: <verb> <what>` (e.g., `ticket: add user auth endpoint`)
@@ -103,7 +113,6 @@ The [example-scripts/](example-scripts/) directory contains **reference implemen
 | [orchestrator.sh](example-scripts/orchestrator.sh) | Plan → spawn → monitor(900s) → collect loop |
 | [worker.sh](example-scripts/worker.sh) | Clean → read context → work → `Skill(developing-programming)` → commit |
 | [checkpoint.sh](example-scripts/checkpoint.sh) | Git commit with lock |
-| [rollback.sh](example-scripts/rollback.sh) | Git reset --hard |
 
 ## Architecture
 
@@ -135,18 +144,20 @@ tmux session: "<project-folder-name>"
 ### Worker Cycle (one ticket per round)
 
 
-1. Clean: git status → reset --hard if dirty
+1. Branch: git worktree add .tmp/worker_{id} -b ticket/{slug}
 2. Read: .tmp/llm.plan.status, .tmp/llm.working.log, README.md
 3. Work: implement the assigned ticket
 4. `Skill(developing-programming)`: test → format → lint → commit
-5. Signal: write DONE to _trigger_{id}
+5. Merge: merge branch back to main, remove worktree
+6. Signal: write DONE to _trigger_{id}
 
 
 ## Coordination
 
 | Mechanism | How | Why |
 |-----------|-----|-----|
-| **Git Lock** | `mkdir _git.lock` (atomic) | Only one worker commits at a time |
+| **Git Worktree** | `git worktree add .tmp/worker_{id}` | Each worker has isolated branch — no conflicts |
+| **Git Lock** | `mkdir _git.lock` (atomic) | Only one worker merges at a time |
 | **Trigger Files** | `_trigger_{id}` with DONE/BLOCKED | Workers signal completion to orchestrator |
 | **Task Queue** | `_task_queue` file | Orchestrator writes planned tasks |
 | **Timeout** | 900s (15 min) | Kill stuck workers, orchestrator continues |

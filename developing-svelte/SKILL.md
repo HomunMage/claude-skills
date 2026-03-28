@@ -54,6 +54,28 @@ src/lib/components/Counter.svelte → <script>
                                     <button onclick={increment}>{$count}</button>
 ```
 
+## Robot Awareness (Playwright-friendly)
+
+All interactive/stateful elements MUST have `data-testid` for Playwright snapshot and automation.
+
+```svelte
+<!-- BAD: no way for Playwright to reliably target -->
+<button onclick={submit}>Save</button>
+<div>{status}</div>
+
+<!-- GOOD: robot-friendly -->
+<button data-testid="save-btn" onclick={submit}>Save</button>
+<div data-testid="status-msg">{status}</div>
+```
+
+Rules:
+- `data-testid` on every: button, link, input, form, modal, toast, dynamic text
+- Naming: `{component}-{element}` — e.g. `login-email-input`, `cart-checkout-btn`
+- Lists: `data-testid="item-{id}"` on each row for individual targeting
+- States: reflect state in DOM — `aria-busy`, `aria-disabled`, `data-status` — so Playwright can `waitForSelector('[data-status="loaded"]')`
+
+**Why:** Playwright snapshots and clicks rely on stable selectors. CSS classes change, text changes with i18n. `data-testid` is the contract between UI and automation.
+
 ## When Writing Code
 
 1. **New feature?** Start with `.ts` in `src/lib/` — types first, then logic
