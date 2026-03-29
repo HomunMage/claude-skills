@@ -34,14 +34,6 @@ $(cat "${PROJECT_DIR}/${f}")
     fi
   done
 
-  # Also include .tmp/llm.working.notes if it exists
-  if [ -f "${PROJECT_DIR}/.tmp/llm.working.notes" ]; then
-    CONTEXT_FILES="${CONTEXT_FILES}
---- .tmp/llm.working.notes ---
-$(cat "${PROJECT_DIR}/.tmp/llm.working.notes")
-"
-  fi
-
   CLAUDECODE= claude -p \
     --dangerously-skip-permissions \
     --model haiku \

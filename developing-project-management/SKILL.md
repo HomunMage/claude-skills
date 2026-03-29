@@ -150,12 +150,89 @@ curl -s -X POST "http://localhost:5000/api/tables/${TABLE_ID}/rows" \
   -d '{"row_data": {"<title_col_id>": "<title>", "<type_col_id>": "task", "<status_col_id>": "todo", "<priority_col_id>": "medium"}}'
 ```
 
+## Auto-Cascade: Parent Status from Children
+
+When a task/bug is marked `merged`, check if all siblings under the same parent are also `merged`. If yes, auto-update the parent (story) to `merged`. Same logic cascades: all stories merged → epic merged.
+
+```bash
+# After updating a ticket to merged, check parent cascade:
+python3 -c "
+import json, urllib.request
+
+TABLE_ID = '<table_id>'
+AUTH = {'Authorization': 'Bearer claude'}
+
+# Fetch all rows
+rows = json.loads(urllib.request.urlopen(urllib.request.Request(
+    f'http://localhost:5000/api/tables/{TABLE_ID}/rows?offset=0&limit=200',
+    headers=AUTH
+)).read())
+
+# Get column IDs from table
+table = json.loads(urllib.request.urlopen(urllib.request.Request(
+    f'http://localhost:5000/api/tables/{TABLE_ID}',
+    headers=AUTH
+)).read())
+cols = {c['name']: c['column_id'] for c in table.get('columns',[])}
+status_id = cols.get('Status','')
+parent_id = cols.get('Parent','')
+if not status_id or not parent_id: exit()
+
+# Build parent → children map
+by_id = {r['row_id']: r for r in rows}
+children_of = {}
+for r in rows:
+    pid = r['row_data'].get(parent_id)
+    if pid:
+        children_of.setdefault(pid, []).append(r)
+
+# Check each parent: if all children merged, mark parent merged
+for pid, kids in children_of.items():
+    if pid not in by_id: continue
+    parent = by_id[pid]
+    if parent['row_data'].get(status_id) == 'merged': continue
+    if all(k['row_data'].get(status_id) == 'merged' for k in kids):
+        new_data = {**parent['row_data'], status_id: 'merged'}
+        req = urllib.request.Request(
+            f'http://localhost:5000/api/rows/{pid}',
+            data=json.dumps({'row_data': new_data}).encode(),
+            headers={**AUTH, 'Content-Type': 'application/json'},
+            method='PUT'
+        )
+        urllib.request.urlopen(req)
+        key_id = cols.get('Key','')
+        print(f'Auto-merged parent: {parent[\"row_data\"].get(key_id, pid)}')
+"
+```
+
+Run this after every ticket status update to `merged`.
+
+## Ticket Docs (MinIO)
+
+Each ticket's detailed notes/spec live in MinIO, not in `.tmp/llm.working.notes`:
+
+```
+{user_id}/{workspace_id}/{table_id}/{row_id}.md
+```
+
+Access via:
+- `GET /api/tables/{table_id}/rows/{row_id}/doc` — read doc
+- `PUT /api/tables/{table_id}/rows/{row_id}/doc` — save doc
+
+**Do NOT use `.tmp/llm.working.notes`** — all notes go to the ticket's doc in LatticeCast.
+
 ## Status Flow
 
 ```
 todo → in_progress → testing → review → merged
                        ↓
                     debugging → testing (loop)
+
+Auto-cascade: all children merged → parent auto-merged
+  task merged ──┐
+  task merged ──┤→ story auto-merged ──┐
+  task merged ──┘                      ├→ epic auto-merged
+  story auto-merged ───────────────────┘
 ```
 
 | Status | Trigger |
@@ -165,4 +242,4 @@ todo → in_progress → testing → review → merged
 | `testing` | Running tests |
 | `debugging` | Tests failed |
 | `review` | Committed |
-| `merged` | Branch merged |
+| `merged` | Branch merged / all children merged |

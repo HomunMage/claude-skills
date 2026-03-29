@@ -55,13 +55,6 @@ $(head -200 "${PROJECT_DIR}/${f}")
 "
 done
 
-for f in .tmp/llm.working.notes; do
-  [ -f "${PROJECT_DIR}/${f}" ] && CONTEXT="${CONTEXT}
---- ${f} ---
-$(tail -100 "${PROJECT_DIR}/${f}")
-"
-done
-
 for f in "${PROJECT_DIR}"/.tmp/llm*.md; do
   [ -f "$f" ] || continue
   BASENAME=$(basename "$f")

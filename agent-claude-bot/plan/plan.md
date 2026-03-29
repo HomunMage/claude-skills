@@ -43,9 +43,9 @@ The user knows the business context. You know the technical patterns.
 Write design docs for user to review before creating tickets:
 
 - `.tmp/llm.design.*.md` — architecture, API design, data model decisions
-- `.tmp/llm.working.notes` — working notes, constraints, gotchas
 
 These are **drafts for review** — user approves before tickets are created.
+After tickets are created in LatticeCast, detailed notes go to each ticket's doc in MinIO (not `.tmp/llm.working.notes`).
 
 ## Step 4: Break Down into Tickets
 
@@ -102,11 +102,7 @@ curl -s -X POST "http://localhost:5000/api/tables/${TABLE_ID}/rows" \
   }}'
 ```
 
-4. **Delete `.tmp/llm.plan.status`** if it exists — tickets now live in LatticeCast:
-```bash
-rm -f .tmp/llm.plan.status
-```
-
+4. **Write detailed notes** to each ticket's doc in MinIO via `PUT /api/tables/{table_id}/rows/{row_id}/doc`
 5. Report: **"Created N tickets in LatticeCast. Ready to start `/claude-bot`?"**
 
 ## Step 7: Generate Runner Scripts
