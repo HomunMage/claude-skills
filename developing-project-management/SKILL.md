@@ -209,7 +209,7 @@ Run this after every ticket status update to `merged`.
 
 ## Ticket Docs (MinIO)
 
-Each ticket's detailed notes/spec live in MinIO, not in `.tmp/llm.working.notes`:
+Each ticket's detailed notes/spec live in MinIO:
 
 ```
 {user_id}/{workspace_id}/{table_id}/{row_id}.md
@@ -219,7 +219,7 @@ Access via:
 - `GET /api/tables/{table_id}/rows/{row_id}/doc` — read doc
 - `PUT /api/tables/{table_id}/rows/{row_id}/doc` — save doc
 
-**Do NOT use `.tmp/llm.working.notes`** — all notes go to the ticket's doc in LatticeCast.
+all notes go to the ticket's doc in LatticeCast.
 
 ## Status Flow
 

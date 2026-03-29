@@ -45,7 +45,7 @@ Write design docs for user to review before creating tickets:
 - `.tmp/llm.design.*.md` — architecture, API design, data model decisions
 
 These are **drafts for review** — user approves before tickets are created.
-After tickets are created in LatticeCast, detailed notes go to each ticket's doc in MinIO (not `.tmp/llm.working.notes`).
+After tickets are created in LatticeCast, detailed notes go to each ticket's doc in MinIO.
 
 ## Step 4: Break Down into Tickets
 
@@ -79,31 +79,12 @@ Ask: **"Approve these tickets? I'll create them in LatticeCast PM."**
 
 After user approves, use `Skill(developing-project-management)`:
 
-1. **Ensure LatticeCast is running** — if not, prompt user to start it
-2. **Ensure PM table exists** for this repo — if not, create via template
-3. **Create each ticket as a row** in the PM table:
-   - Title = ticket description
-   - Type = `task` (or `epic`/`story` if hierarchical)
-   - Status = `todo`
-   - Priority = based on phase order
-   - Tags = phase label (e.g. "phase-1")
-
-```bash
-# For each ticket:
-curl -s -X POST "http://localhost:5000/api/tables/${TABLE_ID}/rows" \
-  -H "Authorization: Bearer claude" \
-  -H "Content-Type: application/json" \
-  -d '{"row_data": {
-    "<title_col>": "Add JWT middleware",
-    "<type_col>": "task",
-    "<status_col>": "todo",
-    "<priority_col>": "high",
-    "<tags_col>": ["phase-1"]
-  }}'
-```
-
-4. **Write detailed notes** to each ticket's doc in MinIO via `PUT /api/tables/{table_id}/rows/{row_id}/doc`
-5. Report: **"Created N tickets in LatticeCast. Ready to start `/claude-bot`?"**
+1. Use "Ensure LatticeCast is Running" — if not, prompt user
+2. Use "Setup Project" if PM table doesn't exist — create via template
+3. Use "Create Ticket" for each ticket — set Title, Type, Status=todo, Priority, Tags
+4. Write detailed notes to each ticket's doc via "Ticket Docs (MinIO)"
+5. **Delete design docs** `.tmp/llm*.md` — content now lives in ticket docs:
+6. Report: **"Created N tickets in LatticeCast. Ready to start `/claude-bot`?"**
 
 ## Step 7: Generate Runner Scripts
 
