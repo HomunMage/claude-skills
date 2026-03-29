@@ -10,7 +10,60 @@ Explore a codebase and produce `.tmp/llm*.md` docs so future Claude sessions (an
 
 ## Process
 
-### 1. Scan Project Root
+### 1. Register Project in LatticeCast PM
+
+Set up the project board **first** so tickets can be tracked during onboarding.
+
+First, check if LatticeCast is running:
+```bash
+curl -s http://localhost:5000/api/status 2>/dev/null || echo "NOT_RUNNING"
+```
+
+If not running, ask the user: **"LatticeCast PM is not running. Please start it first: `cd <LatticeCast-repo> && docker compose up -d backend frontend`, then let me know when it's ready."**
+
+Wait for the user to confirm before proceeding.
+
+**LatticeCast API**: `http://localhost:5000`
+
+#### 1a. Create "claude" user (idempotent)
+```bash
+curl -s http://localhost:5000/api/login/me -H "Authorization: Bearer claude"
+```
+This auto-creates user `claude` (if `auth_required=false`).
+If `auth_required=true`, use admin API to create the user first.
+
+#### 1b. Ask user for team member IDs
+Ask: **"Which user IDs should have access to this project workspace? (e.g. homunmage@gmail.com, latticemage@gmail.com)"**
+
+#### 1c. Add members to claude's workspace
+```bash
+# For each user_id provided:
+curl -s -X POST http://localhost:5000/api/workspaces/claude/members \
+  -H "Authorization: Bearer claude" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "<user_id>", "role": "member"}'
+```
+Ensure each member user exists first (call `/api/login/me` with their token, or admin API).
+
+#### 1d. Create PM table from template
+```bash
+PROJECT_NAME="$(basename $(pwd))"
+curl -s -X POST http://localhost:5000/api/tables/template/pm \
+  -H "Authorization: Bearer claude" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\": \"${PROJECT_NAME}\", \"workspace_id\": \"claude\"}"
+```
+This creates a table with: Key, Title, Type (epic/story/task/bug), Status, Priority, Assignee, Start/Due Date, Estimate, Tags, Description, Parent — plus default Kanban + Timeline views.
+
+#### 1e. Report the URL
+```
+Project board: http://localhost:3000/claude/<table_id>
+Views: Table (default) | Sprint Board (Kanban) | Roadmap (Timeline)
+```
+
+If LatticeCast is not reachable, skip this step and proceed to step 2.
+
+### 2. Scan Project Root
 
 Read overview first (if they exist).
 ex:
@@ -19,7 +72,7 @@ ex:
 - `docker-compose.yml` — services architecture
 - `.env.example` — config shape
 
-### 2. Map Directory Structure
+### 3. Map Directory Structure
 
 ```bash
 find . -type f -not -path './.git/*' -not -path './node_modules/*' -not -path './.tmp/*' | head -200
@@ -27,7 +80,7 @@ find . -type f -not -path './.git/*' -not -path './node_modules/*' -not -path '.
 
 Identify layers: frontend, backend, API, DB, auth, infra, tests.
 
-### 3. Trace Key Flows
+### 4. Trace Key Flows
 
 For each major module, trace:
 - **Entry point** — where does it start?
@@ -35,7 +88,7 @@ For each major module, trace:
 - **Dependencies** — what does it import/call?
 - **Config** — env vars, constants, feature flags
 
-### 4. Write `.tmp/llm*.md` Docs
+### 5. Write `.tmp/llm*.md` Docs
 
 Create `.tmp/` if not exists. examples: (just possible, not must)
 
@@ -52,7 +105,7 @@ Create `.tmp/` if not exists. examples: (just possible, not must)
 
 Only create files for domains that exist in the project. Skip what's not there.
 
-### 5. Doc Format
+### 6. Doc Format
 
 Each `llm*.md` follows:
 
@@ -91,3 +144,4 @@ A → B → C
 - **No opinions** — document what IS, not what should be
 - Skip boilerplate/obvious stuff — only document what's non-trivial
 - If project is large, prioritize: auth > API > DB > frontend > infra
+- **PM setup requires LatticeCast running** — skip step 1 if backend is not reachable
