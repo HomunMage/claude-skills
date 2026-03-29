@@ -67,7 +67,7 @@ done
 if [ -n "$TASK_DESC" ]; then
   TASK_PROMPT="YOUR ASSIGNED TASK: ${TASK_DESC}"
 else
-  TASK_PROMPT="Query LatticeCast PM (http://localhost:5000) for the first todo ticket in this repo's PM table. Use Bearer claude auth."
+  TASK_PROMPT="Query LatticeCast PM (http://localhost:13491) for the first todo ticket in this repo's PM table. Use Bearer claude auth."
 fi
 
 SHARED_CONTEXT="You are Worker ${WORKER_ID}. Working directory: ${PROJECT_DIR}
@@ -106,7 +106,7 @@ Never commit .tmp/ files."
 step "update-status" "${SHARED_CONTEXT}
 
 Update ticket status in LatticeCast PM to 'merged':
-Use curl to PUT the row with updated status via http://localhost:5000/api/rows/{row_id}
+Use curl to PUT the row with updated status via http://localhost:13491/api/rows/{row_id}
 Authorization: Bearer claude"
 
 # ─── Signal done ─────────────────────────────────────────────────────────────

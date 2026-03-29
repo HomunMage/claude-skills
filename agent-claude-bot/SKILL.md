@@ -20,7 +20,7 @@ Start a tmux-based orchestrator that runs N workers in parallel to solve project
 
 ## Prerequisites
 
-- **LatticeCast PM running** — `http://localhost:5000/api/status` must respond
+- **LatticeCast PM running** — `http://localhost:13491/api/status` must respond
 - See `Skill(developing-project-management)` for setup (git clone + docker compose up)
 - `README.md` — project overview
 

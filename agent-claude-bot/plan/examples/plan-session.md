@@ -75,7 +75,7 @@ Written to `.tmp/llm.design.api.md` — user reviews and approves.
 ## Claude creates tickets in LatticeCast PM
 
 Actions taken:
-1. Ensured LatticeCast PM is running (`curl http://localhost:5000/api/status`)
+1. Ensured LatticeCast PM is running (`curl http://localhost:13491/api/status`)
 2. Created 7 tickets in LatticeCast PM table (each as a row with Title, Type=task, Status=todo, Priority, Tags=phase-N)
 3. Wrote detailed notes to each ticket's doc in MinIO (`PUT /api/tables/{id}/rows/{id}/doc`)
 4. Created `.tmp/claude-bot/start.sh` — launches workers in tmux

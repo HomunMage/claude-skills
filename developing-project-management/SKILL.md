@@ -11,7 +11,7 @@ Internal skill providing PM operations. Other skills compose via `Skill(developi
 
 ## LatticeCast API
 
-**URL**: `http://localhost:5000`
+**URL**: `http://localhost:13491`
 **Auth**: `Authorization: Bearer claude` (claude is the bot user)
 
 ## Ensure LatticeCast is Running
@@ -19,7 +19,7 @@ Internal skill providing PM operations. Other skills compose via `Skill(developi
 Before any PM operation, check connectivity:
 
 ```bash
-curl -s http://localhost:5000/api/status 2>/dev/null | grep -q '"ok"'
+curl -s http://localhost:13491/api/status 2>/dev/null | grep -q '"ok"'
 ```
 
 If **not running**, tell the user:
@@ -41,7 +41,7 @@ If **not running**, tell the user:
 
 ### 1. Create claude user
 ```bash
-curl -s http://localhost:5000/api/login/me -H "Authorization: Bearer claude"
+curl -s http://localhost:13491/api/login/me -H "Authorization: Bearer claude"
 ```
 
 ### 2. Ask user for team members
@@ -50,9 +50,9 @@ Ask: **"Which user IDs should have access? (e.g. homunmage@gmail.com)"**
 ### 3. Add members
 ```bash
 # Ensure member user exists first
-curl -s http://localhost:5000/api/login/me -H "Authorization: Bearer <user_id>"
+curl -s http://localhost:13491/api/login/me -H "Authorization: Bearer <user_id>"
 # Add to claude's workspace
-curl -s -X POST http://localhost:5000/api/workspaces/claude/members \
+curl -s -X POST http://localhost:13491/api/workspaces/claude/members \
   -H "Authorization: Bearer claude" \
   -H "Content-Type: application/json" \
   -d '{"user_id": "<user_id>", "role": "member"}'
@@ -61,7 +61,7 @@ curl -s -X POST http://localhost:5000/api/workspaces/claude/members \
 ### 4. Create PM table
 ```bash
 PROJECT_NAME="$(basename $(git rev-parse --show-toplevel 2>/dev/null || pwd))"
-curl -s -X POST http://localhost:5000/api/tables/template/pm \
+curl -s -X POST http://localhost:13491/api/tables/template/pm \
   -H "Authorization: Bearer claude" \
   -H "Content-Type: application/json" \
   -d "{\"name\": \"${PROJECT_NAME}\", \"workspace_id\": \"claude\"}"
@@ -69,7 +69,7 @@ curl -s -X POST http://localhost:5000/api/tables/template/pm \
 
 ### 5. Report URL
 ```
-Project board: http://localhost:3000/claude/<table_id>
+Project board: http://localhost:13492/claude/<table_id>
 Views: Table | Sprint Board (Kanban) | Roadmap (Timeline)
 ```
 
@@ -79,7 +79,7 @@ Find PM table matching repo name, list tickets sorted newest first:
 
 ```bash
 REPO_NAME="$(basename $(git rev-parse --show-toplevel 2>/dev/null || pwd))"
-curl -s http://localhost:5000/api/tables -H "Authorization: Bearer claude" | \
+curl -s http://localhost:13491/api/tables -H "Authorization: Bearer claude" | \
 python3 -c "
 import sys, json, urllib.request
 tables = json.load(sys.stdin)
@@ -89,9 +89,9 @@ if not table:
     print(f'No PM table for \"{repo}\"'); exit()
 tid = table['table_id']
 cols = {c['name']: c['column_id'] for c in table.get('columns',[])}
-print(f'Project: {table[\"name\"]}  URL: http://localhost:3000/claude/{tid}')
+print(f'Project: {table[\"name\"]}  URL: http://localhost:13492/claude/{tid}')
 rows = json.loads(urllib.request.urlopen(urllib.request.Request(
-    f'http://localhost:5000/api/tables/{tid}/rows?offset=0&limit=20',
+    f'http://localhost:13491/api/tables/{tid}/rows?offset=0&limit=20',
     headers={'Authorization': 'Bearer claude'}
 )).read())
 rows.sort(key=lambda r: r.get('updated_at',''), reverse=True)
@@ -113,7 +113,7 @@ REPO_NAME="$(basename $(git rev-parse --show-toplevel 2>/dev/null || pwd))"
 python3 -c "
 import json, urllib.request
 tables = json.loads(urllib.request.urlopen(urllib.request.Request(
-    'http://localhost:5000/api/tables',
+    'http://localhost:13491/api/tables',
     headers={'Authorization': 'Bearer claude'}
 )).read())
 table = next((t for t in tables if t['name'].lower() == '${REPO_NAME}'.lower()), None)
@@ -123,14 +123,14 @@ cols = {c['name']: c['column_id'] for c in table.get('columns',[])}
 status_id, key_id = cols.get('Status',''), cols.get('Key','')
 if not status_id or not key_id: exit()
 rows = json.loads(urllib.request.urlopen(urllib.request.Request(
-    f'http://localhost:5000/api/tables/{tid}/rows?offset=0&limit=200',
+    f'http://localhost:13491/api/tables/{tid}/rows?offset=0&limit=200',
     headers={'Authorization': 'Bearer claude'}
 )).read())
 row = next((r for r in rows if r['row_data'].get(key_id) == '<TICKET_KEY>'), None)
 if not row: print('Ticket not found'); exit()
 new_data = {**row['row_data'], status_id: '<NEW_STATUS>'}
 req = urllib.request.Request(
-    f'http://localhost:5000/api/rows/{row[\"row_id\"]}',
+    f'http://localhost:13491/api/rows/{row[\"row_id\"]}',
     data=json.dumps({'row_data': new_data}).encode(),
     headers={'Authorization': 'Bearer claude', 'Content-Type': 'application/json'},
     method='PUT'
@@ -144,7 +144,7 @@ print(f'<TICKET_KEY> → <NEW_STATUS>')
 
 ```bash
 TABLE_ID="<table_id>"
-curl -s -X POST "http://localhost:5000/api/tables/${TABLE_ID}/rows" \
+curl -s -X POST "http://localhost:13491/api/tables/${TABLE_ID}/rows" \
   -H "Authorization: Bearer claude" \
   -H "Content-Type: application/json" \
   -d '{"row_data": {"<title_col_id>": "<title>", "<type_col_id>": "task", "<status_col_id>": "todo", "<priority_col_id>": "medium"}}'
@@ -164,13 +164,13 @@ AUTH = {'Authorization': 'Bearer claude'}
 
 # Fetch all rows
 rows = json.loads(urllib.request.urlopen(urllib.request.Request(
-    f'http://localhost:5000/api/tables/{TABLE_ID}/rows?offset=0&limit=200',
+    f'http://localhost:13491/api/tables/{TABLE_ID}/rows?offset=0&limit=200',
     headers=AUTH
 )).read())
 
 # Get column IDs from table
 table = json.loads(urllib.request.urlopen(urllib.request.Request(
-    f'http://localhost:5000/api/tables/{TABLE_ID}',
+    f'http://localhost:13491/api/tables/{TABLE_ID}',
     headers=AUTH
 )).read())
 cols = {c['name']: c['column_id'] for c in table.get('columns',[])}
@@ -194,7 +194,7 @@ for pid, kids in children_of.items():
     if all(k['row_data'].get(status_id) == 'merged' for k in kids):
         new_data = {**parent['row_data'], status_id: 'merged'}
         req = urllib.request.Request(
-            f'http://localhost:5000/api/rows/{pid}',
+            f'http://localhost:13491/api/rows/{pid}',
             data=json.dumps({'row_data': new_data}).encode(),
             headers={**AUTH, 'Content-Type': 'application/json'},
             method='PUT'

@@ -46,9 +46,9 @@ ${CONTEXT_FILES}
 There are ${NUM_WORKERS} workers available.
 
 YOUR JOB:
-1. Query LatticeCast PM (http://localhost:5000) for todo tickets in this repo's PM table
-   curl -s http://localhost:5000/api/tables -H 'Authorization: Bearer claude' to find the table
-   curl -s http://localhost:5000/api/tables/{table_id}/rows to get tickets
+1. Query LatticeCast PM (http://localhost:13491) for todo tickets in this repo's PM table
+   curl -s http://localhost:13491/api/tables -H 'Authorization: Bearer claude' to find the table
+   curl -s http://localhost:13491/api/tables/{table_id}/rows to get tickets
 2. Assign ONE todo ticket to each worker
 3. Ensure workers won't conflict (different files/features)
 4. If fewer todo tickets than workers, assign IDLE to extra workers
