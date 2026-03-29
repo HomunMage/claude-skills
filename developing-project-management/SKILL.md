@@ -69,7 +69,7 @@ curl -s -X POST http://localhost:13491/api/tables/template/pm \
 
 ### 5. Report URL
 ```
-Project board: http://localhost:13492/claude/<table_id>
+Project board: http://localhost:13491/claude/<table_id>
 Views: Table | Sprint Board (Kanban) | Roadmap (Timeline)
 ```
 
@@ -89,7 +89,7 @@ if not table:
     print(f'No PM table for \"{repo}\"'); exit()
 tid = table['table_id']
 cols = {c['name']: c['column_id'] for c in table.get('columns',[])}
-print(f'Project: {table[\"name\"]}  URL: http://localhost:13492/claude/{tid}')
+print(f'Project: {table[\"name\"]}  URL: http://localhost:13491/claude/{tid}')
 rows = json.loads(urllib.request.urlopen(urllib.request.Request(
     f'http://localhost:13491/api/tables/{tid}/rows?offset=0&limit=20',
     headers={'Authorization': 'Bearer claude'}
