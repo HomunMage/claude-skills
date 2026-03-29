@@ -37,10 +37,8 @@ Brief one-liner about what this project does.
 ## On Start — Read These First
 
 1. `README.md` — project overview, architecture, tech stack
-2. `.tmp/llm.plan.status` — ticket list and current status (pick `[ ]` tickets to work on)
-3. `.tmp/llm.working.log` — abstract of recent completed work
-4. `.tmp/llm.working.notes` — detailed working notes (if exists, read for more context)
-5. Any `.tmp/llm*.md` files — design docs, API specs, references
+2. Query LatticeCast PM for tickets — use `Skill(developing-project-management)` "Query Tickets"
+3. Any `.tmp/llm*.md` files — design docs, API specs, references
 
 ## Temporary Files
 

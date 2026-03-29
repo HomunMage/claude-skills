@@ -1,13 +1,13 @@
 # Example Planning Session
 
-This shows what a `/claude-plan` session looks like.
+This shows what a `/claude-bot plan` session looks like.
 
 ---
 
 ## User starts
 
 ```
-/claude-plan /home/user/my-api-project
+/claude-bot plan
 ```
 
 ## Claude reads the project
@@ -41,55 +41,48 @@ This shows what a `/claude-plan` session looks like.
 >
 > **Database**: Prisma ORM with PostgreSQL
 >
-> **Questions**:
-> 1. Do you want pagination on list endpoints?
-> 2. Should users be able to edit/delete their own comments?
-> 3. Any rate limiting needed for MVP?
+> I'll write the design to `.tmp/llm.design.api.md` for your review.
 
-## User answers
+## Claude writes design doc
 
-> 1. Yes, simple offset/limit pagination
-> 2. Yes, delete only (no edit)
-> 3. No, skip for MVP
+Written to `.tmp/llm.design.api.md` — user reviews and approves.
 
 ## Claude produces tickets
 
 > Here are the tickets. Each is <15 min, independently testable:
 >
-> ### Phase 1: Setup (2 tickets, parallelizable)
-> - [ ] Add Prisma with PostgreSQL — schema with User, Post, Comment models, migration
-> - [ ] Add base Express app with error handling, CORS, health check endpoint
+> ### Phase 1: Setup (2 tickets)
+> - Add Prisma with PostgreSQL — schema with User, Post, Comment models
+> - Add base Express app with error handling, CORS, health check
 >
-> ### Phase 2: Auth (2 tickets, sequential)
-> - [ ] Add register endpoint — POST /auth/register, bcrypt hash, return JWT
-> - [ ] Add login endpoint + auth middleware — POST /auth/login, JWT verify middleware
+> ### Phase 2: Auth (2 tickets)
+> - Add register endpoint — POST /auth/register, bcrypt hash, return JWT
+> - Add login endpoint + auth middleware — POST /auth/login, JWT verify
 >
-> ### Phase 3: CRUD (3 tickets, parallelizable after auth)
-> - [ ] Add Post CRUD — GET/POST /posts, GET/PUT/DELETE /posts/:id (auth required for write)
-> - [ ] Add Comment endpoints — GET/POST /posts/:id/comments, DELETE /comments/:id (own only)
-> - [ ] Add pagination to GET /posts and GET /posts/:id/comments (offset/limit query params)
+> ### Phase 3: CRUD (3 tickets)
+> - Add Post CRUD — GET/POST /posts, GET/PUT/DELETE /posts/:id
+> - Add Comment endpoints — GET/POST /posts/:id/comments, DELETE /comments/:id
+> - Add pagination to GET /posts and GET /posts/:id/comments
 >
 > **Total: 7 tickets, 3 phases**
-> **Parallelism: Phase 1 = 2 workers, Phase 2 = 1 worker, Phase 3 = 2-3 workers**
 >
-> **Ready to start `/claude-bot`?**
+> **Approve these tickets? I'll create them in LatticeCast PM.**
 
 ## User approves
 
 > Looks good, go!
 
-## Claude creates the files
+## Claude creates tickets in LatticeCast PM
 
-Files written:
-- `.tmp/llm.plan.status` — 7 tickets across 3 phases
-- `CLAUDE.md` — dev rules with `npm test`, `npx prettier --write .`, Prisma conventions
-- `.tmp/llm.working.log` — initialized with `[PLAN] 7 tickets across 3 phases`
-- `.tmp/llm.working.notes` — design decisions (JWT, bcrypt, Prisma, pagination approach)
-- `.tmp/claude-bot/worker1.sh` — worker for Phase 1-2 tickets (database + auth scope)
-- `.tmp/claude-bot/worker2.sh` — worker for Phase 3 tickets (CRUD + pagination scope)
-- `.tmp/claude-bot/start.sh` — launches both workers in tmux with orchestration
+Actions taken:
+1. Ensured LatticeCast PM is running (`curl http://localhost:5000/api/status`)
+2. Created 7 tickets in LatticeCast PM table for this project (each as a row with Title, Type=task, Status=todo, Priority, Tags=phase-N)
+3. Created `.tmp/claude-bot/start.sh` — launches workers in tmux
+4. Written `.tmp/llm.working.notes` — design decisions
 
 Now the user can run:
 ```bash
 bash .tmp/claude-bot/start.sh
 ```
+
+Workers will query LatticeCast PM for `todo` tickets and start working.

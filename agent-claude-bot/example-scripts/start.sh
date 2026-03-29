@@ -13,10 +13,11 @@ MAX_CYCLES="${2:-50}"
 NUM_WORKERS="${3:-2}"
 SESSION="$(basename "$PROJECT_DIR")"
 
-# Validate project directory
-if [ ! -f "${PROJECT_DIR}/.tmp/llm.plan.status" ]; then
-  echo "ERROR: ${PROJECT_DIR}/.tmp/llm.plan.status not found."
-  echo "Create a ticket file first. See README.md for format."
+# Validate LatticeCast PM is running
+if ! curl -s http://localhost:5000/api/status 2>/dev/null | grep -q '"ok"'; then
+  echo "ERROR: LatticeCast PM is not running."
+  echo "Start it: cd <LatticeCast-repo> && docker compose up -d backend frontend"
+  echo "Or clone: git clone https://github.com/LatticeMage/LatticeCast.git"
   exit 1
 fi
 

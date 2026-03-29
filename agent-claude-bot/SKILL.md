@@ -1,6 +1,6 @@
 ---
 name: agent-claude-bot
-description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from .tmp/llm.plan.status
+description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
 ---
 
@@ -8,18 +8,20 @@ argument-hint: plan | running | status
 
 Start a tmux-based orchestrator that runs N workers in parallel to solve project tickets autonomously.
 
-## What This Does
+## Flow
 
-1. Creates a tmux session named after the project folder
-2. Runs an orchestrator (Haiku) that reads `.tmp/llm.plan.status` and assigns tickets to workers
-3. Spawns N workers (Sonnet) in separate tmux windows
-4. Each worker: git worktree branch → implement ticket → `Skill(developing-programming)` → commit → merge back
-5. Orchestrator monitors workers (kills if >900s), collects results, loops (50 cycles max)
+```
+1. User calls /claude-bot plan
+2. Planning: discuss design → write .tmp/llm.design.*.md for review
+3. User approves → create tickets in LatticeCast PM
+5. User approve start workers
+6. Workers: query PM → pick todo ticket → worktree branch → implement → update status → merge
+```
 
 ## Prerequisites
 
-The target project must have:
-- `.tmp/llm.plan.status` — ticket list with `[ ]` / `[x]` checkboxes
+- **LatticeCast PM running** — `http://localhost:5000/api/status` must respond
+- See `Skill(developing-project-management)` for setup (git clone + docker compose up)
 - `README.md` — project overview
 
 ## Worker Workflow
@@ -27,31 +29,33 @@ The target project must have:
 ### On Start — Read These First
 
 1. `README.md` — project overview, architecture, tech stack
-2. `.tmp/llm.plan.status` — ticket list and current status
-3. `.tmp/llm.working.log` — abstract of recent completed work
-4. `.tmp/llm.working.notes` — detailed working notes (if exists)
-5. Any `.tmp/llm*md` files — design docs, API specs, references
-6. **Load all `developing-*` skills** — `Skill(developing-svelte)`, `Skill(developing-db-sql)`, `Skill(developing-programming)`, etc. These contain project coding standards that workers MUST follow.
+2. **Query LatticeCast PM** — use `Skill(developing-project-management)` "Query Tickets" for current status
+3. Any `.tmp/llm*.md` files — design docs, API specs, references
+4. **Load `Skill(developing-programming)`** + **`Skill(developing-project-management)`**
 
 ### Step 1: Create Worktree Branch
 ```bash
-# Create isolated worktree for this ticket
 git worktree add .tmp/worker_{id} -b ticket/{ticket-slug} main
 cd .tmp/worker_{id}
 ```
-Each worker operates in its own worktree — no conflicts, no need for rollback.
+Each worker operates in its own worktree — no conflicts.
 
 ### Step 2: Pick ONE Ticket
-- Read `.tmp/llm.plan.status`
-- Find the first `[ ]` (unchecked) ticket
+- Query LatticeCast PM for `todo` tickets via `Skill(developing-project-management)`
+- Pick the first `todo` ticket
 - Work on ONLY that ticket
 
 ### Step 3: Implement
+- Update PM status → `in_progress`
 - Make the smallest possible change to complete the ticket
 - Stay in scope — don't refactor unrelated code
 
 ### Step 4: Test, Format, Lint, Commit
-Use `Skill(developing-programming)` — follow developing.md workflow.
+Use `Skill(developing-programming)` workflow:
+- Update PM status → `testing`
+- Run tests (if fail → `debugging`, fix, re-test)
+- Format + lint
+- Commit → `review`
 
 ### Step 5: Merge & Cleanup
 ```bash
@@ -60,31 +64,26 @@ git merge ticket/{ticket-slug}
 git worktree remove .tmp/worker_{id}
 git branch -d ticket/{ticket-slug}
 ```
+Update PM status → `merged`
 
-### Step 6: Update Status
-1. Mark the ticket `[x]` in `.tmp/llm.plan.status`
-2. Append a summary to `.tmp/llm.working.log`:
-   ```
-   [W{id}] <what was done> — <files changed>
-   ```
+### Step 6: Signal Done
+Write DONE to trigger file for orchestrator.
 
 ## Worker Rules
 
 - **ONE ticket per session.** Do not batch multiple tickets.
 - **Never ask questions.** Make reasonable decisions and document them in the commit message.
 - **Stay in your assigned scope.** Don't touch files outside your task boundary.
-- **If stuck after 3 attempts:** write BLOCKED to the trigger file, stop. Worktree can be discarded.
+- **If stuck after 3 attempts:** write BLOCKED to the trigger file, stop.
 - **All tests must pass** before committing.
 - **Don't break existing tests.**
 - **Commit messages:** `ticket: <verb> <what>` (e.g., `ticket: add user auth endpoint`)
 
 ## Usage
 
-The planning phase designs custom runner scripts in the target project's `.tmp/claude-bot/`.
-
 Start the bot:
 ```bash
-bash .tmp/claude-bot/start.sh $ARGUMENTS
+bash .tmp/claude-bot/start.sh
 ```
 
 Monitor:
@@ -94,48 +93,40 @@ tmux attach -t <project-folder-name>
 
 Stop:
 ```bash
-bash .tmp/claude-bot/stop.sh $ARGUMENTS
+bash .tmp/claude-bot/stop.sh
 ```
 
 ## Planning Phase
 
 Before running the bot, use the planning phase to discuss and design tickets with the user.
 See [plan/plan.md](plan/plan.md) for the full planning workflow.
-See [plan/examples/plan-session.md](plan/examples/plan-session.md) for an example session.
 
 ## Example Scripts
 
-The [example-scripts/](example-scripts/) directory contains **reference implementations** — patterns to learn from, not scripts to copy. During planning, Claude designs custom scripts in `.tmp/claude-bot/` tailored to the project.
+The [example-scripts/](example-scripts/) directory contains **reference implementations**.
 
 | Example | Pattern |
 |---------|---------|
 | [start.sh](example-scripts/start.sh) | tmux session setup |
 | [stop.sh](example-scripts/stop.sh) | Cleanup trigger/lock files |
 | [orchestrator.sh](example-scripts/orchestrator.sh) | Plan → spawn → monitor(900s) → collect loop |
-| [worker.sh](example-scripts/worker.sh) | Clean → read context → work → `Skill(developing-programming)` → commit |
+| [worker.sh](example-scripts/worker.sh) | Worktree → implement → `Skill(developing-programming)` → merge |
 | [checkpoint.sh](example-scripts/checkpoint.sh) | Git commit with lock |
 
 ## Architecture
 
 ```
 tmux session: "<project-folder-name>"
- ├── window 0: orchestrator.sh (Haiku — plans tasks, monitors workers)
+ ├── window 0: orchestrator.sh (Haiku — queries PM, assigns tasks)
  ├── window 1: worker.sh #1   (Sonnet — picks ticket, codes, tests, commits)
  ├── window 2: worker.sh #2   (Sonnet — picks ticket, codes, tests, commits)
  └── ...N workers
 ```
 
-### Model Usage
-
-| Role | Model | Why |
-|------|-------|-----|
-| Orchestrator (planner) | Haiku | Fast, cheap — only reads status and assigns tasks |
-| Worker | Sonnet | Smart enough to code, test, and commit correctly |
-
 ### Orchestrator Cycle (50 rounds max)
 
 ```
-1. Plan: read .tmp/llm.plan.status → call claude (haiku) to assign tasks
+1. Plan: query LatticeCast PM for todo tickets → assign to workers
 2. Spawn: launch N workers in tmux windows
 3. Monitor: poll _trigger_{id} files → kill workers if >900s
 4. Collect: read DONE/BLOCKED results
@@ -144,56 +135,35 @@ tmux session: "<project-folder-name>"
 
 ### Worker Cycle (one ticket per round)
 
-
+```
 1. Branch: git worktree add .tmp/worker_{id} -b ticket/{slug}
-2. Read: .tmp/llm.plan.status, .tmp/llm.working.log, README.md
-3. Work: implement the assigned ticket
-4. `Skill(developing-programming)`: test → format → lint → commit
-5. Merge: merge branch back to main, remove worktree
+2. Query: LatticeCast PM for assigned todo ticket
+3. Work: implement the ticket, update PM status throughout
+4. Skill(developing-programming): test → format → lint → commit
+5. Merge: merge branch back to main, remove worktree, PM → merged
 6. Signal: write DONE to _trigger_{id}
-
+```
 
 ## Coordination
 
 | Mechanism | How | Why |
 |-----------|-----|-----|
-| **Git Worktree** | `git worktree add .tmp/worker_{id}` | Each worker has isolated branch — no conflicts |
+| **Git Worktree** | `git worktree add .tmp/worker_{id}` | Isolated branch per worker |
 | **Git Lock** | `mkdir _git.lock` (atomic) | Only one worker merges at a time |
-| **Trigger Files** | `_trigger_{id}` with DONE/BLOCKED | Workers signal completion to orchestrator |
-| **Task Queue** | `_task_queue` file | Orchestrator writes planned tasks |
-| **Timeout** | 900s (15 min) | Kill stuck workers, orchestrator continues |
+| **Trigger Files** | `_trigger_{id}` with DONE/BLOCKED | Workers signal completion |
+| **LatticeCast PM** | HTTP API for ticket status | Single source of truth for tickets |
+| **Timeout** | 900s (15 min) | Kill stuck workers |
 
 ## File Conventions
 
-These files live in the **target project**:
+| File | Purpose |
+|------|---------|
+| `README.md` | Project overview |
+| `.tmp/llm*.md` | Design docs, references (planning phase output) |
+| `.tmp/claude-bot/*.sh` | Runner scripts |
+| `.tmp/out/*.log` | Worker/orchestrator logs |
 
-| File | Required | Purpose |
-|------|----------|---------|
-| `README.md` | Yes | Project overview |
-| `.tmp/llm.plan.status` | Yes | Ticket list with `[ ]`/`[x]` checkboxes |
-| `.tmp/llm.working.log` | Auto-created | Abstract of completed work (append-only) |
-| `.tmp/llm.working.notes` | Optional | Detailed working notes |
-| `.tmp/llm*.md` | Optional | Design docs, references, specs |
-
-### .tmp/llm.plan.status format
-
-```markdown
-## Phase 1: Core
-- [x] Initialize project scaffold
-- [ ] Add database models         ← worker picks this
-- [ ] Create API endpoints
-```
-
-- Each ticket must be small enough to implement, test, and commit in <15 minutes
-- Use `[ ]` for pending, `[x]` for done
-- Workers mark `[x]` after committing
-
-### .tmp/llm.working.log format (auto-generated by workers)
-
-```
-[W1] Initialized project scaffold — created package.json, tsconfig, src/ structure
-[W2] Added database models — User, Post, Comment with Prisma schema
-```
+**Note:** `.tmp/llm.plan.status` is NOT used. All ticket tracking is in LatticeCast PM. After planning creates tickets in PM, delete `.tmp/llm.plan.status` if it exists.
 
 ## Logs
 

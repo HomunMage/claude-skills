@@ -25,7 +25,7 @@ plan_tasks() {
   local CONTEXT_FILES=""
 
   # Build context from available files
-  for f in ".tmp/llm.plan.status" ".tmp/llm.working.log" "CLAUDE.md" "README.md"; do
+  for f in "CLAUDE.md" "README.md"; do
     if [ -f "${PROJECT_DIR}/${f}" ]; then
       CONTEXT_FILES="${CONTEXT_FILES}
 --- ${f} ---
@@ -54,17 +54,19 @@ ${CONTEXT_FILES}
 There are ${NUM_WORKERS} workers available.
 
 YOUR JOB:
-1. Read .tmp/llm.plan.status — find tickets marked [ ] (not yet done)
-2. Assign ONE small ticket to each worker
+1. Query LatticeCast PM (http://localhost:5000) for todo tickets in this repo's PM table
+   curl -s http://localhost:5000/api/tables -H 'Authorization: Bearer claude' to find the table
+   curl -s http://localhost:5000/api/tables/{table_id}/rows to get tickets
+2. Assign ONE todo ticket to each worker
 3. Ensure workers won't conflict (different files/features)
-4. If fewer tickets than workers, assign IDLE to extra workers
+4. If fewer todo tickets than workers, assign IDLE to extra workers
 
 OUTPUT FORMAT (only output this, nothing else):
-TASK1: <ticket description for worker 1, or IDLE>
-TASK2: <ticket description for worker 2, or IDLE>
+TASK1: <ticket key + description for worker 1, or IDLE>
+TASK2: <ticket key + description for worker 2, or IDLE>
 ...up to TASK${NUM_WORKERS}
 
-If ALL tickets are [x] (done), output only:
+If ALL tickets are done (no todo status), output only:
 ALL_DONE
 " 2>/dev/null | grep -E '^(TASK[0-9]+:|ALL_DONE)' > "${PROJECT_DIR}/_task_queue"
 }

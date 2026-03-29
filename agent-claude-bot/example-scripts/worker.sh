@@ -55,7 +55,7 @@ $(head -200 "${PROJECT_DIR}/${f}")
 "
 done
 
-for f in .tmp/llm.plan.status .tmp/llm.working.log .tmp/llm.working.notes; do
+for f in .tmp/llm.working.notes; do
   [ -f "${PROJECT_DIR}/${f}" ] && CONTEXT="${CONTEXT}
 --- ${f} ---
 $(tail -100 "${PROJECT_DIR}/${f}")
@@ -65,7 +65,6 @@ done
 for f in "${PROJECT_DIR}"/.tmp/llm*.md; do
   [ -f "$f" ] || continue
   BASENAME=$(basename "$f")
-  case "$BASENAME" in llm.plan.status|llm.working.log|llm.working.notes) continue ;; esac
   CONTEXT="${CONTEXT}
 --- ${BASENAME} ---
 $(head -200 "$f")
@@ -75,7 +74,7 @@ done
 if [ -n "$TASK_DESC" ]; then
   TASK_PROMPT="YOUR ASSIGNED TASK: ${TASK_DESC}"
 else
-  TASK_PROMPT="Pick the first unchecked [ ] ticket from .tmp/llm.plan.status."
+  TASK_PROMPT="Query LatticeCast PM (http://localhost:5000) for the first todo ticket in this repo's PM table. Use Bearer claude auth."
 fi
 
 SHARED_CONTEXT="You are Worker ${WORKER_ID}. Working directory: ${PROJECT_DIR}
@@ -110,17 +109,12 @@ Commit the changes:
 4. Release lock: rmdir ${GIT_LOCK}
 Never commit .tmp/ files."
 
-# Step 4: Update status
+# Step 4: Update PM status to merged
 step "update-status" "${SHARED_CONTEXT}
 
-Update status files:
-1. Edit .tmp/llm.plan.status: change [ ] to [x] for the completed ticket
-2. Append to .tmp/llm.working.log: [W${WORKER_ID}] <what was done> — <files changed>
-3. Commit status:
-   while ! mkdir ${GIT_LOCK} 2>/dev/null; do sleep 2; done
-   git add .tmp/llm.plan.status .tmp/llm.working.log
-   git commit -m 'status: mark ticket done [W${WORKER_ID}]'
-   rmdir ${GIT_LOCK}"
+Update ticket status in LatticeCast PM to 'merged':
+Use curl to PUT the row with updated status via http://localhost:5000/api/rows/{row_id}
+Authorization: Bearer claude"
 
 # ─── Signal done ─────────────────────────────────────────────────────────────
 echo "DONE" > "$TRIGGER_FILE"

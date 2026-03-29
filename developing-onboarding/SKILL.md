@@ -12,56 +12,9 @@ Explore a codebase and produce `.tmp/llm*.md` docs so future Claude sessions (an
 
 ### 1. Register Project in LatticeCast PM
 
-Set up the project board **first** so tickets can be tracked during onboarding.
+Use `Skill(developing-project-management)` — "Setup Project" section.
 
-First, check if LatticeCast is running:
-```bash
-curl -s http://localhost:5000/api/status 2>/dev/null || echo "NOT_RUNNING"
-```
-
-If not running, ask the user: **"LatticeCast PM is not running. Please start it first: `cd <LatticeCast-repo> && docker compose up -d backend frontend`, then let me know when it's ready."**
-
-Wait for the user to confirm before proceeding.
-
-**LatticeCast API**: `http://localhost:5000`
-
-#### 1a. Create "claude" user (idempotent)
-```bash
-curl -s http://localhost:5000/api/login/me -H "Authorization: Bearer claude"
-```
-This auto-creates user `claude` (if `auth_required=false`).
-If `auth_required=true`, use admin API to create the user first.
-
-#### 1b. Ask user for team member IDs
-Ask: **"Which user IDs should have access to this project workspace? (e.g. homunmage@gmail.com, latticemage@gmail.com)"**
-
-#### 1c. Add members to claude's workspace
-```bash
-# For each user_id provided:
-curl -s -X POST http://localhost:5000/api/workspaces/claude/members \
-  -H "Authorization: Bearer claude" \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "<user_id>", "role": "member"}'
-```
-Ensure each member user exists first (call `/api/login/me` with their token, or admin API).
-
-#### 1d. Create PM table from template
-```bash
-PROJECT_NAME="$(basename $(pwd))"
-curl -s -X POST http://localhost:5000/api/tables/template/pm \
-  -H "Authorization: Bearer claude" \
-  -H "Content-Type: application/json" \
-  -d "{\"name\": \"${PROJECT_NAME}\", \"workspace_id\": \"claude\"}"
-```
-This creates a table with: Key, Title, Type (epic/story/task/bug), Status, Priority, Assignee, Start/Due Date, Estimate, Tags, Description, Parent — plus default Kanban + Timeline views.
-
-#### 1e. Report the URL
-```
-Project board: http://localhost:3000/claude/<table_id>
-Views: Table (default) | Sprint Board (Kanban) | Roadmap (Timeline)
-```
-
-If LatticeCast is not reachable, skip this step and proceed to step 2.
+This creates the PM board with tickets, views (Table/Kanban/Timeline), and shared workspace.
 
 ### 2. Scan Project Root
 
@@ -144,4 +97,3 @@ A → B → C
 - **No opinions** — document what IS, not what should be
 - Skip boilerplate/obvious stuff — only document what's non-trivial
 - If project is large, prioritize: auth > API > DB > frontend > infra
-- **PM setup requires LatticeCast running** — skip step 1 if backend is not reachable
