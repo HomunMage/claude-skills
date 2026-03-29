@@ -1,6 +1,7 @@
 ---
 name: developing-svelte
 description: Svelte/SvelteKit development — enforce pure TS logic in src/lib/, .svelte files handle UI/UX only. Use when writing Svelte components or SvelteKit routes.
+version: 0.1.0
 ---
 
 # Svelte Architecture: Logic/UI Separation

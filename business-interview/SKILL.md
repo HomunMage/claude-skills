@@ -1,6 +1,7 @@
 ---
 name: business-interview
 description: Career — interview preparation, hiring evaluation, and resume building. Use for job search or recruitment workflows.
+version: 0.1.0
 ---
 
 # Career — Interview, Hiring & Resume

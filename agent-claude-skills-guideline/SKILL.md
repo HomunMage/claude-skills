@@ -1,6 +1,7 @@
 ---
 name: agent-claude-skills-guideline
 description: Guide for creating Claude Code skills (SKILL.md). Use when building, structuring, or debugging custom skills/slash commands.
+version: 0.3.0
 ---
 
 # Skills = Library Dependencies
@@ -35,9 +36,10 @@ developing-project-management/ # lib with lazy deps
 
 ## Rules
 
-1. **SKILL.md < 500 lines.** Split or decompose.
-2. **Split by load frequency.** Always → SKILL.md. Once → setup.md. On-demand → reference.md.
-3. **Sub-files = zero context cost** until explicitly read.
-4. **精簡但深邃。AI秒懂。** Every line carries weight. No filler.
+1. **Semantic versioning.** Every SKILL.md frontmatter must have `version:` starting from `0.1.0`. Bump on changes for debugging.
+2. **SKILL.md < 500 lines.** Split or decompose.
+3. **Split by load frequency.** Always → SKILL.md. Once → setup.md. On-demand → reference.md.
+4. **Sub-files = zero context cost** until explicitly read.
+5. **精簡但深邃。AI秒懂。** Every line carries weight. No filler.
 
 See [creating.md](creating.md) for syntax/frontmatter reference.

@@ -1,6 +1,7 @@
 ---
 name: content-jekyll-mindmap
 description: Create Jekyll mindmap visualizations using markmap layout. Use when building mind maps with nested bullet points.
+version: 0.1.0
 ---
 
 # Jekyll Mindmap (Markmap)

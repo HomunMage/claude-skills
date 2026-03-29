@@ -1,6 +1,7 @@
 ---
 name: content-how-to-guides
 description: Create step-by-step tutorial guides with Playwright screenshots and Jekyll markdown output.
+version: 0.1.0
 ---
 
 # How-to Guides

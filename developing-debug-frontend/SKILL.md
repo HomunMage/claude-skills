@@ -2,6 +2,7 @@
 name: developing-debug-frontend
 description: Frontend debugging with Playwright in Docker — screenshot, click, inspect pages. Use when debugging frontend UI, testing web pages, or checking visual state.
 allowed-tools: Read, Bash, Grep
+version: 0.1.0
 ---
 
 # Frontend Debug — Playwright in Docker

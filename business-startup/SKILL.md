@@ -1,6 +1,7 @@
 ---
 name: business-startup
 description: Startup strategy — brand marketing, project management, and quarterly reviews. Use for product launch or iteration planning.
+version: 0.1.0
 ---
 
 # Startup — Brand Marketing & Project Management

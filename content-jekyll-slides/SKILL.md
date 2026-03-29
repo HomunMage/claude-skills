@@ -1,6 +1,7 @@
 ---
 name: content-jekyll-slides
 description: Create Jekyll slide presentations. Use when building slides with h2 headings as separators.
+version: 0.1.0
 ---
 
 # Jekyll Slides

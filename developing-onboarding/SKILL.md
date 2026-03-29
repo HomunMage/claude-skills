@@ -2,6 +2,7 @@
 name: developing-codebase-onboarding
 description: Onboard a new codebase — explore, understand, and generate .tmp/llm*.md docs for quick reference. Use when joining a new project or needing to understand unfamiliar code.
 allowed-tools: Read, Grep, Glob, Bash, Agent
+version: 0.2.0
 ---
 
 # Codebase Onboarding

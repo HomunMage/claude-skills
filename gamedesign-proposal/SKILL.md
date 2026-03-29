@@ -1,6 +1,7 @@
 ---
 name: gamedesign-proposal
 description: Generate one-page game proposal as proposal.yml — title, mechanics, selling points, concept art.
+version: 0.1.0
 ---
 
 # Game Proposal

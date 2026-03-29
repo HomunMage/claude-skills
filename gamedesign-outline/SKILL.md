@@ -1,6 +1,7 @@
 ---
 name: gamedesign-outline
 description: Generate outline.yml following Save the Cat beat sheet in 3 acts. Use for story structure and narrative design.
+version: 0.1.0
 ---
 
 # Story Outline

@@ -1,6 +1,7 @@
 ---
 name: agent-claude-md-creating
 description: Guide for creating CLAUDE.md files — project instructions that Claude Code auto-loads. Use when setting up, writing, or organizing CLAUDE.md files.
+version: 0.1.0
 ---
 
 # Writing Philosophy
