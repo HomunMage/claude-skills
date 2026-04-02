@@ -51,20 +51,54 @@ After tickets are created in LatticeCast, detailed notes go to each ticket's doc
 
 Once aligned, create ticket descriptions following these rules:
 
-### Ticket Rules
-- Each ticket must be **completable in <15 minutes** by a Claude Sonnet worker
-- Each ticket must be **independently testable** — tests must pass after each ticket
-- Each ticket must be **independently committable** — clean git commit after each
-- Tickets should **not conflict** — two workers shouldn't edit the same file
-- Group into phases — Phase 1 (scaffold), Phase 2 (core), Phase 3 (features), etc.
+### Mandatory Hierarchy: 1 Epic → N Stories → N Issues
 
-### Bad Tickets (too big)
+Every plan **MUST** follow this exact three-level hierarchy. No exceptions.
+
+```
+Epic (1 per plan)
+└── Story 1 (feature area / phase)
+│   ├── Issue 1.1 (concrete implementation task)
+│   ├── Issue 1.2
+│   └── Issue 1.N
+└── Story 2
+    ├── Issue 2.1
+    └── Issue 2.N
+```
+
+**Epic** — the single top-level goal of this plan. Set `type=epic`.  
+**Story** — a feature area, phase, or user-facing capability. Set `type=story`, `Parent=<epic_row_id>`.  
+**Issue/Task** — a single implementation unit. Set `type=task` or `type=bug`, `Parent=<story_row_id>`.
+
+Rules:
+- **Exactly 1 epic** per plan — never 0, never 2+
+- **Every story** must have `Parent` pointing to the epic
+- **Every issue** must have `Parent` pointing to a story (never directly to the epic)
+- Stories are **never** directly implementable — they are groupings only
+- Issues are the only tickets assigned to workers
+
+### Ticket Size Rules
+- Each issue must be **completable in <15 minutes** by a Claude Sonnet worker
+- Each issue must be **independently testable** — tests must pass after each issue
+- Each issue must be **independently committable** — clean git commit after each
+- Issues should **not conflict** — two workers shouldn't edit the same file
+- Group stories into phases — Story 1 (scaffold), Story 2 (core), Story 3 (features), etc.
+
+### Bad Tickets (too big or wrong level)
 - "Build the entire authentication system" — too many files, too many decisions
 - "Refactor the codebase" — vague, unbounded
+- Creating tasks directly under the epic (skipping stories) — violates hierarchy
 
-### Good Tickets (small, testable)
-- "Add JWT verification middleware in src/middleware/auth.ts"
-- "Add POST /users endpoint with email+password validation"
+### Good Hierarchy Example
+```
+Epic: Add OAuth2 Login
+├── Story: Backend Auth Endpoints  (Parent=epic)
+│   ├── Task: Add /auth/google route in router/auth.py  (Parent=story)
+│   └── Task: Add JWT token generation in auth service  (Parent=story)
+└── Story: Frontend Login UI  (Parent=epic)
+    ├── Task: Add LoginButton component in src/lib/  (Parent=story)
+    └── Task: Handle OAuth callback in +page.svelte   (Parent=story)
+```
 
 ## Step 5: User Approval
 
@@ -81,10 +115,12 @@ After user approves, use `Skill(developing-project-management)`:
 
 1. Use "Ensure LatticeCast is Running" — if not, prompt user
 2. Use "Setup Project" if PM table doesn't exist — create via template
-3. Use "Create Ticket" for each ticket — set Title, Type, Status=todo, Priority, Tags
-4. Write detailed notes to each ticket's doc via "Ticket Docs (MinIO)"
-5. **Delete design docs** `.tmp/llm*.md` — content now lives in ticket docs:
-6. Report: **"Created N tickets in LatticeCast. Ready to start `/claude-bot`?"**
+3. Create the **epic first**, note its `row_id`
+4. Create each **story** with `Parent=<epic_row_id>`, note each story's `row_id`
+5. Create each **issue** with `Parent=<story_row_id>` — never parent directly to epic
+6. Write detailed notes to each ticket's doc via "Ticket Docs (MinIO)"
+7. **Delete design docs** `.tmp/llm*.md` — content now lives in ticket docs:
+8. Report: **"Created N tickets in LatticeCast. Ready to start `/claude-bot`?"**
 
 ## Step 7: Generate Runner Scripts
 
