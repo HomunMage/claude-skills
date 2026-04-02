@@ -74,6 +74,68 @@ curl -s -X POST "http://localhost:13491/api/tables/{table_id}/rows" \
 
 All notes go to the ticket's doc in LatticeCast.
 
+## Story Branch Management
+
+Story branches bridge issues and main. Issues branch off the story branch; when all issues are merged, the story merges into main.
+
+### Create Story Branch from Main
+
+```bash
+STORY_KEY="<story-key-lowercase>"  # e.g. l-5
+STORY_BRANCH="story/${STORY_KEY}"
+
+git checkout main
+git checkout -b "$STORY_BRANCH" 2>/dev/null || git checkout "$STORY_BRANCH"
+```
+
+### Merge Story into Main (when all issues merged)
+
+After merging an issue into its story branch, check whether all sibling issues are done, then merge story into main:
+
+```bash
+TABLE_ID="<table_id>"
+STORY_ROW_ID="<story_row_id>"
+PARENT_COL_ID="<parent_col_id>"
+STATUS_COL_ID="<status_col_id>"
+STORY_BRANCH="story/<story-key-lowercase>"
+
+ALL_ROWS=$(curl -s "http://localhost:13491/api/tables/${TABLE_ID}/rows?limit=200" \
+  -H "Authorization: Bearer claude")
+
+UNMERGED=$(echo "$ALL_ROWS" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+unmerged = [r for r in rows
+            if r["row_data"].get("${PARENT_COL_ID}") == "${STORY_ROW_ID}"
+            and r["row_data"].get("${STATUS_COL_ID}") != "merged"]
+print(len(unmerged))
+")
+
+if [ "$UNMERGED" = "0" ]; then
+  git checkout main
+  git merge "$STORY_BRANCH"
+  git branch -d "$STORY_BRANCH"
+  # Update story ticket → merged
+  STORY_DATA=$(echo "$ALL_ROWS" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+for r in rows:
+    if r["row_id"] == "${STORY_ROW_ID}":
+        d = r["row_data"]
+        d["${STATUS_COL_ID}"] = "merged"
+        print(json.dumps({"row_data": d}))
+        break
+")
+  curl -s -X PUT "http://localhost:13491/api/rows/${STORY_ROW_ID}" \
+    -H "Authorization: Bearer claude" \
+    -H "Content-Type: application/json" \
+    -d "$STORY_DATA" > /dev/null
+  echo "Story merged into main."
+else
+  echo "Not all issues merged yet ($UNMERGED remaining). Story branch stays open."
+fi
+```
+
 ## Status Flow
 
 ```
