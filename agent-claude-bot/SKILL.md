@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.11.0
+version: 0.12.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -71,7 +71,7 @@ STORY_BRANCH="story/<story-key-lowercase>"
 Ensure the story branch exists; create it from main if not:
 ```bash
 git checkout main
-git checkout -b "" 2>/dev/null || git checkout ""
+git checkout -b "$STORY_BRANCH" 2>/dev/null || git checkout "$STORY_BRANCH"
 ```
 
 ### Step 2: Create Worktree Branch from Story Branch
@@ -107,10 +107,10 @@ Use `Skill(developing-programming)` workflow:
 
 ```bash
 cd <project-root>
-git checkout ""
-git merge issue/{ticket-slug}          # merge issue into story branch
+git checkout "$STORY_BRANCH"
+git merge "$SLUG"                      # merge issue into story branch
 git worktree remove .tmp/worker_{id}
-git branch -d issue/{ticket-slug}
+git branch -d "$SLUG"
 ```
 
 Update PM status → `merged`
@@ -123,8 +123,8 @@ After marking the issue merged, check sibling issues in PM:
 # Query all rows in table, filter by Parent = <story_row_id>
 # If ALL sibling issues have status=merged:
 git checkout main
-git merge ""
-git branch -d ""
+git merge "$STORY_BRANCH"
+git branch -d "$STORY_BRANCH"
 # Update story PM status → merged
 ```
 
