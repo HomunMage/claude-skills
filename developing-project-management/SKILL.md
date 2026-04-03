@@ -3,7 +3,7 @@ name: developing-project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal lib used by developing-programming, agent-claude-bot, developing-onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.1.0
+version: 0.2.0
 ---
 
 # LatticeCast Project Management
@@ -58,13 +58,18 @@ curl -s -X PUT "http://localhost:13491/api/rows/{row_id}" \
 
 See [endpoints.md](endpoints.md) "Update Ticket Status" for the full script that looks up by ticket key.
 
+## Default Time Rule
+
+When creating a ticket, if `Start Date` or `Due Date` is not explicitly specified, **default both to today's date** (e.g. `2026-04-03`). Never leave date fields empty.
+
 ## Create Ticket
 
 ```bash
+TODAY=$(date -u +%Y-%m-%d)
 curl -s -X POST "http://localhost:13491/api/tables/{table_id}/rows" \
   -H "Authorization: Bearer claude" \
   -H "Content-Type: application/json" \
-  -d '{"row_data": {"<title_col_id>": "<title>", "<type_col_id>": "task", "<status_col_id>": "todo", "<priority_col_id>": "medium"}}'
+  -d '{"row_data": {"<title_col_id>": "<title>", "<type_col_id>": "task", "<status_col_id>": "todo", "<priority_col_id>": "medium", "<start_date_col_id>": "'$TODAY'", "<due_date_col_id>": "'$TODAY'"}}'
 ```
 
 ## Ticket Docs (MinIO)
@@ -73,6 +78,68 @@ curl -s -X POST "http://localhost:13491/api/tables/{table_id}/rows" \
 - `PUT /api/tables/{table_id}/rows/{row_id}/doc` — save (text/plain body)
 
 All notes go to the ticket's doc in LatticeCast.
+
+## Story Branch Management
+
+Story branches bridge issues and main. Issues branch off the story branch; when all issues are merged, the story merges into main.
+
+### Create Story Branch from Main
+
+```bash
+STORY_KEY="<story-key-lowercase>"  # e.g. l-5
+STORY_BRANCH="story/${STORY_KEY}"
+
+git checkout main
+git checkout -b "$STORY_BRANCH" 2>/dev/null || git checkout "$STORY_BRANCH"
+```
+
+### Merge Story into Main (when all issues merged)
+
+After merging an issue into its story branch, check whether all sibling issues are done, then merge story into main:
+
+```bash
+TABLE_ID="<table_id>"
+STORY_ROW_ID="<story_row_id>"
+PARENT_COL_ID="<parent_col_id>"
+STATUS_COL_ID="<status_col_id>"
+STORY_BRANCH="story/<story-key-lowercase>"
+
+ALL_ROWS=$(curl -s "http://localhost:13491/api/tables/${TABLE_ID}/rows?limit=200" \
+  -H "Authorization: Bearer claude")
+
+UNMERGED=$(echo "$ALL_ROWS" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+unmerged = [r for r in rows
+            if r["row_data"].get("${PARENT_COL_ID}") == "${STORY_ROW_ID}"
+            and r["row_data"].get("${STATUS_COL_ID}") != "merged"]
+print(len(unmerged))
+")
+
+if [ "$UNMERGED" = "0" ]; then
+  git checkout main
+  git merge "$STORY_BRANCH"
+  git branch -d "$STORY_BRANCH"
+  # Update story ticket → merged
+  STORY_DATA=$(echo "$ALL_ROWS" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+for r in rows:
+    if r["row_id"] == "${STORY_ROW_ID}":
+        d = r["row_data"]
+        d["${STATUS_COL_ID}"] = "merged"
+        print(json.dumps({"row_data": d}))
+        break
+")
+  curl -s -X PUT "http://localhost:13491/api/rows/${STORY_ROW_ID}" \
+    -H "Authorization: Bearer claude" \
+    -H "Content-Type: application/json" \
+    -d "$STORY_DATA" > /dev/null
+  echo "Story merged into main."
+else
+  echo "Not all issues merged yet ($UNMERGED remaining). Story branch stays open."
+fi
+```
 
 ## Status Flow
 
