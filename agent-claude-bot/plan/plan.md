@@ -121,8 +121,66 @@ After user approves, use `Skill(developing-project-management)`:
 3. Create the **epic first**, note its `row_id`
 4. Create each **story** with `Parent=<epic_row_id>`, note each story's `row_id`
 5. Create each **issue** with `Parent=<story_row_id>` — never parent directly to epic
-6. Write detailed notes to each ticket's doc via "Ticket Docs (MinIO)"
-7. **Delete design docs** `.tmp/llm*.md` — content now lives in ticket docs:
+6. **Write design content to ticket docs in MinIO** via `PUT /api/tables/{table_id}/rows/{row_id}/doc`:
+
+   **Epic doc** — full design overview, architecture decisions, scope:
+   ```markdown
+   # {Key}: {Title}
+   
+   ## Overview
+   <paste the design discussion summary here>
+   
+   ## Architecture
+   <architecture decisions, diagrams>
+   
+   ## Scope
+   <what's in/out of scope>
+   
+   ## Stories
+   - [{story_key}] {story_title}
+   ```
+
+   **Story doc** — story-level spec, acceptance criteria, files to change:
+   ```markdown
+   # {Key}: {Title}
+   
+   ## Parent
+   [{epic_key}] {epic_title}
+   
+   ## Spec
+   <what this story delivers>
+   
+   ## Files to Change
+   - path/to/file.ts — what changes
+   
+   ## Issues
+   - [{issue_key}] {issue_title}
+   
+   ## Acceptance Criteria
+   - [ ] Criteria 1
+   - [ ] Criteria 2
+   ```
+
+   **Issue doc** — implementation instructions, specific steps:
+   ```markdown
+   # {Key}: {Title}
+   
+   ## Parent
+   [{story_key}] {story_title}
+   
+   ## What to Do
+   <specific implementation instructions>
+   
+   ## Files
+   - path/to/file.ts — exact changes needed
+   
+   ## Work Log
+   (workers will append here as they work)
+   ```
+
+   **CRITICAL**: Every ticket MUST have non-empty doc content after planning. Empty docs = planning failure.
+
+7. **Delete design docs** `.tmp/llm*.md` — content now lives in ticket docs
 8. Report: **"Created N tickets in LatticeCast. Ready to start `/claude-bot`?"**
 
 ## Step 7: Generate Runner Scripts

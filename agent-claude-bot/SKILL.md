@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.13.0
+version: 0.15.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -86,22 +86,29 @@ cd .tmp/worker_{id}
 
 Each worker operates in its own worktree — no conflicts.
 
-### Step 3: Pick ONE Ticket
-- Query LatticeCast PM for `todo` tickets via `Skill(developing-project-management)`
-- Pick the first `todo` **issue** (type=task or type=bug) — never pick epics or stories
+### Step 3: Pick Ticket → IMMEDIATELY update to `in_progress`
+- Query LatticeCast PM for `todo` issues (type=task or type=bug)
+- **Update PM status → `in_progress` FIRST** before doing anything else
+- **Append to doc**: `- {timestamp} Picked up by W{id}`
+- **Read the issue's doc** from MinIO: `GET /api/tables/{table_id}/rows/{row_id}/doc`
+- The doc contains implementation instructions written during planning — **follow them**
 - Work on ONLY that ticket
 
-### Step 4: Implement
-- Update PM status → `in_progress`
+### Step 4: Implement — MUST update doc continuously
 - Make the smallest possible change to complete the ticket
+- **Append to doc** after each significant step:
+  - `- {timestamp} Reading {file} to understand existing pattern`
+  - `- {timestamp} Creating {file} with {description}`
+  - `- {timestamp} Modifying {file}: {what changed}`
+  - `- {timestamp} Decision: {why I chose X over Y}`
 - Stay in scope — don't refactor unrelated code
 
 ### Step 5: Test, Format, Lint, Commit
 Use `Skill(developing-programming)` workflow:
-- Update PM status → `testing`
-- Run tests (if fail → `debugging`, fix, re-test)
+- Update PM status → `testing`, **append to doc**: `- {timestamp} Running tests`
+- Run tests (if fail → `debugging`, **append to doc**: `- {timestamp} Tests failed: {error}`)
 - Format + lint
-- Commit → `review`
+- Commit → `review`, **append to doc**: `- {timestamp} Committed {sha}`
 
 ### Step 6: Merge Issue into Story Branch & Cleanup
 
@@ -144,6 +151,7 @@ Write DONE to trigger file for orchestrator.
 - **Commit messages:** `ticket: <verb> <what>` (e.g., `ticket: add user auth endpoint`)
 - **Issue branches base off story branch, not main.**
 - **Story branches base off main.**
+- **CRITICAL: Continuously update the ticket doc in MinIO.** The doc is the single source of truth for what happened. After EVERY significant action (reading code, creating file, making a decision, running tests, hitting an error), append a timestamped entry to the doc via `PUT /api/tables/{table_id}/rows/{row_id}/doc`. If a ticket's doc is empty after work is done, the worker has FAILED. The user reads these docs to understand progress — treat them like a Notion task page.
 
 ## Usage
 

@@ -2,10 +2,18 @@
 name: developing-db-sql
 description: SQL writing — INSERT, UPSERT, indexing, JSONB. Use when writing or reviewing SQL statements, migrations, or schema changes.
 user-invocable: false
-version: 0.1.0
+version: 0.2.0
 ---
 
 # Safe SQL Rules
+
+## Migrations: NEVER modify existing files
+
+**NEVER** edit an existing `migration/*.sql` file — it may have already been applied to production databases.
+
+**ALWAYS** create a new migration file with the next sequence number.
+
+**Why:** Migrations are applied once and recorded. Modifying an applied migration causes drift between environments. Always move forward.
 
 ## UPSERT: Always specify conflict target
 
