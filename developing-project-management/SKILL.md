@@ -3,7 +3,7 @@ name: developing-project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal lib used by developing-programming, agent-claude-bot, developing-onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.1.0
+version: 0.2.0
 ---
 
 # LatticeCast Project Management
@@ -58,13 +58,18 @@ curl -s -X PUT "http://localhost:13491/api/rows/{row_id}" \
 
 See [endpoints.md](endpoints.md) "Update Ticket Status" for the full script that looks up by ticket key.
 
+## Default Time Rule
+
+When creating a ticket, if `Start Date` or `Due Date` is not explicitly specified, **default both to today's date** (e.g. `2026-04-03`). Never leave date fields empty.
+
 ## Create Ticket
 
 ```bash
+TODAY=$(date -u +%Y-%m-%d)
 curl -s -X POST "http://localhost:13491/api/tables/{table_id}/rows" \
   -H "Authorization: Bearer claude" \
   -H "Content-Type: application/json" \
-  -d '{"row_data": {"<title_col_id>": "<title>", "<type_col_id>": "task", "<status_col_id>": "todo", "<priority_col_id>": "medium"}}'
+  -d '{"row_data": {"<title_col_id>": "<title>", "<type_col_id>": "task", "<status_col_id>": "todo", "<priority_col_id>": "medium", "<start_date_col_id>": "'$TODAY'", "<due_date_col_id>": "'$TODAY'"}}'
 ```
 
 ## Ticket Docs (MinIO)

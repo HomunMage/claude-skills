@@ -51,6 +51,9 @@ After tickets are created in LatticeCast, detailed notes go to each ticket's doc
 
 Once aligned, create ticket descriptions following these rules:
 
+### Default Time Rule
+When creating tickets, if the user does not specify Start Date or Due Date, **default both to today's date**. Never leave date fields empty.
+
 ### Mandatory Hierarchy: 1 Epic → N Stories → N Issues
 
 Every plan **MUST** follow this exact three-level hierarchy. No exceptions.
