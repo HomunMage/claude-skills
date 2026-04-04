@@ -75,6 +75,15 @@ After completing implementation, append to ticket doc:
 _log_step "Implementation complete"
 ```
 
+## Step 2.5: If test ticket → run Playwright snapshot instead
+
+If the ticket has tag `test`, skip normal implementation. Instead:
+1. Write a Playwright test script in `browser/` (e.g. `browser/test_{feature}.py`)
+2. Run via `docker compose exec browser python3 browser/test_{feature}.py`
+3. Save screenshots to `.browser/`
+4. Append screenshot paths + pass/fail to ticket doc
+5. Skip to Step 5 (commit)
+
 ## Step 3: Test → status: `testing`
 
 Update PM: `update_ticket <TICKET_KEY> testing`

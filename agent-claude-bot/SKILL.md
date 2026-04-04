@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.15.0
+version: 0.16.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -152,6 +152,7 @@ Write DONE to trigger file for orchestrator.
 - **Issue branches base off story branch, not main.**
 - **Story branches base off main.**
 - **CRITICAL: Continuously update the ticket doc in MinIO.** The doc is the single source of truth for what happened. After EVERY significant action (reading code, creating file, making a decision, running tests, hitting an error), append a timestamped entry to the doc via `PUT /api/tables/{table_id}/rows/{row_id}/doc`. If a ticket's doc is empty after work is done, the worker has FAILED. The user reads these docs to understand progress — treat them like a Notion task page.
+- **Test tickets** (tags contain `test`): Instead of writing code, run Playwright snapshot test via `docker compose exec browser python3 <test_script>`. Save screenshots to `.browser/`. Append screenshot paths and pass/fail results to ticket doc. If no test script exists, write one in `browser/` directory first.
 
 ## Usage
 

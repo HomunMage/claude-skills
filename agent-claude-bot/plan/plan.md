@@ -97,11 +97,22 @@ Rules:
 Epic: Add OAuth2 Login
 ├── Story: Backend Auth Endpoints  (Parent=epic)
 │   ├── Task: Add /auth/google route in router/auth.py  (Parent=story)
-│   └── Task: Add JWT token generation in auth service  (Parent=story)
+│   ├── Task: Add JWT token generation in auth service  (Parent=story)
+│   └── Task: Test: snapshot Backend Auth Endpoints      (Parent=story, tags=[test])
 └── Story: Frontend Login UI  (Parent=epic)
     ├── Task: Add LoginButton component in src/lib/  (Parent=story)
-    └── Task: Handle OAuth callback in +page.svelte   (Parent=story)
+    ├── Task: Handle OAuth callback in +page.svelte   (Parent=story)
+    └── Task: Test: snapshot Frontend Login UI           (Parent=story, tags=[test])
 ```
+
+### Auto-create Test Ticket per Story
+After creating all issues for a story, **always** add one more issue:
+- Title: `Test: snapshot {story_title}`
+- Type: `task`
+- Tags: `["test"]`
+- Parent: the story's row_id
+
+This test ticket uses `.browser/` Playwright to snapshot-verify the story's features render correctly. Workers pick it up last (after all implementation issues are merged).
 
 ## Step 5: User Approval
 
