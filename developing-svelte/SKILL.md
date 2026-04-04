@@ -1,7 +1,7 @@
 ---
 name: developing-svelte
 description: Svelte/SvelteKit development — enforce pure TS logic in src/lib/, .svelte files handle UI/UX only. Use when writing Svelte components or SvelteKit routes.
-version: 0.2.0
+version: 0.3.0
 ---
 
 # Svelte Architecture: Logic/UI Separation
@@ -92,12 +92,12 @@ Rules:
 # Start browser
 docker compose --profile browser up -d browser
 
-# Snapshot the page you changed
+# Use Skill(developing-debug-frontend) for Playwright snapshot
+# or write inline:
 docker compose exec browser python3 -c "
 from playwright.sync_api import sync_playwright
-# ... intercept localhost:13491 → lattice-cast:13491 ...
-# ... inject auth localStorage ...
-page.goto('http://lattice-cast:13491/<your-page>')
+# ... set up page, inject auth ...
+page.goto('<your-page-url>')
 page.wait_for_timeout(3000)
 page.screenshot(path='/output/<feature_name>.png')
 "

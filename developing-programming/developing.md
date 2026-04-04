@@ -3,35 +3,12 @@
 ## PM Integration
 
 All PM operations use `Skill(developing-project-management)`:
-- **Query tickets** → "Query Tickets" section
-- **Update status** → "Update Ticket Status" section
+- **Query tickets** → "Query Tickets"
+- **Update status** → "Update Ticket Status"
+- **Log to ticket doc** → "Log to Ticket Doc"
 - **Status flow**: `todo → in_progress → testing → debugging → review → merged`
 
-## Work Log Helper
-
-Append a log entry to the ticket's MinIO doc at each phase. Replace `<TABLE_ID>` and `<ROW_ID>` with the values from your task context.
-
-```bash
-# Append a work log entry to the ticket doc
-_log_step() {
-  local TABLE_ID="<TABLE_ID>"
-  local ROW_ID="<ROW_ID>"
-  local MSG="$1"
-  local CURRENT
-  CURRENT=$(curl -s "http://localhost:13491/api/tables/${TABLE_ID}/rows/${ROW_ID}/doc" \
-    -H "Authorization: Bearer claude")
-  local ENTRY="- $(date -u +"%Y-%m-%dT%H:%M:%SZ") ${MSG}"
-  if echo "$CURRENT" | grep -q "^## Work Log"; then
-    local UPDATED="${CURRENT}"$'\n'"${ENTRY}"
-  else
-    local UPDATED="${CURRENT}"$'\n\n'"## Work Log"$'\n'"${ENTRY}"
-  fi
-  curl -s -X PUT "http://localhost:13491/api/tables/${TABLE_ID}/rows/${ROW_ID}/doc" \
-    -H "Authorization: Bearer claude" \
-    -H "Content-Type: text/plain" \
-    --data-raw "$UPDATED" > /dev/null
-}
-```
+Do NOT hardcode PM URLs, auth tokens, or API paths here. All PM logic lives in `Skill(developing-project-management)`.
 
 ## Step 0: Pre-flight — Git & PM Status
 
@@ -59,21 +36,14 @@ SLUG="feat/${TICKET_KEY}/$(echo '<short-description>' | tr ' ' '-')"
 git checkout -b "$SLUG" main
 ```
 
-Update PM: `update_ticket <TICKET_KEY> in_progress`
-
-Append to ticket doc:
-```bash
-_log_step "Started implementation on branch ${SLUG}"
-```
+Use PM skill: `update_ticket <TICKET_KEY> in_progress`
+Use PM skill: `log_to_doc "Started implementation on branch ${SLUG}"`
 
 ## Step 2: Implement
 
 Write the code. Stay in scope — one ticket only.
 
-After completing implementation, append to ticket doc:
-```bash
-_log_step "Implementation complete"
-```
+Use PM skill: `log_to_doc "Implementation complete"`
 
 ## Step 2.5: If test ticket → run Playwright snapshot instead
 
@@ -81,17 +51,13 @@ If the ticket has tag `test`, skip normal implementation. Instead:
 1. Write a Playwright test script in `browser/` (e.g. `browser/test_{feature}.py`)
 2. Run via `docker compose exec browser python3 browser/test_{feature}.py`
 3. Save screenshots to `.browser/`
-4. Append screenshot paths + pass/fail to ticket doc
+4. Use PM skill: `log_to_doc "Screenshots saved to .browser/"`
 5. Skip to Step 5 (commit)
 
 ## Step 3: Test → status: `testing`
 
-Update PM: `update_ticket <TICKET_KEY> testing`
-
-Append to ticket doc:
-```bash
-_log_step "Running tests"
-```
+Use PM skill: `update_ticket <TICKET_KEY> testing`
+Use PM skill: `log_to_doc "Running tests"`
 
 Auto-detect and run tests:
 - `package.json` → `npm test`
@@ -100,17 +66,14 @@ Auto-detect and run tests:
 - `go.mod` → `go test ./...`
 - `Makefile` with test target → `make test`
 
-If tests **fail** → `update_ticket <TICKET_KEY> debugging`, fix, re-test.
-
-```bash
-_log_step "Tests failed — debugging"
-```
+If tests **fail**:
+- Use PM skill: `update_ticket <TICKET_KEY> debugging`
+- Use PM skill: `log_to_doc "Tests failed — debugging"`
+- Fix, re-test.
 
 All tests MUST pass before proceeding.
 
-```bash
-_log_step "All tests passed"
-```
+Use PM skill: `log_to_doc "All tests passed"`
 
 ## Step 4: Format & Lint
 
@@ -134,13 +97,8 @@ git reset HEAD .tmp/ 2>/dev/null || true
 git commit -m "ticket: <short description>"
 ```
 
-Update PM: `update_ticket <TICKET_KEY> review`
-
-Append to ticket doc:
-```bash
-COMMIT_SHA=$(git rev-parse --short HEAD)
-_log_step "Committed ${COMMIT_SHA} — in review"
-```
+Use PM skill: `update_ticket <TICKET_KEY> review`
+Use PM skill: `log_to_doc "Committed $(git rev-parse --short HEAD)"`
 
 ## Step 6: Merge → status: `merged`
 
@@ -150,7 +108,7 @@ git merge "$SLUG"
 git branch -d "$SLUG"
 ```
 
-Update PM: `update_ticket <TICKET_KEY> merged`
+Use PM skill: `update_ticket <TICKET_KEY> merged`
 
 If using worktrees:
 ```bash
