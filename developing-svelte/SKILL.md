@@ -1,7 +1,7 @@
 ---
 name: developing-svelte
 description: Svelte/SvelteKit development — enforce pure TS logic in src/lib/, .svelte files handle UI/UX only. Use when writing Svelte components or SvelteKit routes.
-version: 0.1.0
+version: 0.2.0
 ---
 
 # Svelte Architecture: Logic/UI Separation
@@ -82,7 +82,37 @@ Rules:
 1. **New feature?** Start with `.ts` in `src/lib/` — types first, then logic
 2. **Need UI?** Create `.svelte` that imports from `src/lib/`
 3. **Refactoring?** Extract any logic from `<script>` blocks into `src/lib/`
-4. **Testing?** Logic tests = pure TS (vitest). UI tests = `Skill(developing-debug-frontend)` — Playwright screenshot, click, inspect
+4. **Testing?** Logic tests = pure TS (vitest). UI tests = Playwright snapshot (see below)
+
+## MUST: Verify with .browser Snapshot
+
+**Every FE change MUST be verified with a Playwright screenshot before committing.** No exceptions. If you can't see it, it's not done.
+
+```bash
+# Start browser
+docker compose --profile browser up -d browser
+
+# Snapshot the page you changed
+docker compose exec browser python3 -c "
+from playwright.sync_api import sync_playwright
+# ... intercept localhost:13491 → lattice-cast:13491 ...
+# ... inject auth localStorage ...
+page.goto('http://lattice-cast:13491/<your-page>')
+page.wait_for_timeout(3000)
+page.screenshot(path='/output/<feature_name>.png')
+"
+
+# View result
+ls .browser/<feature_name>.png
+```
+
+**Why:** The typography bug (missing `@tailwindcss/typography`) shipped because nobody looked at the rendered output. A 3-second snapshot would have caught it instantly.
+
+Rules:
+- After **any** visual change (CSS, layout, component, view), take a snapshot
+- Compare before/after if refactoring styling
+- Include snapshot path in commit message or ticket doc
+- If the snapshot looks wrong, fix before committing
 
 ## $lib Alias
 
