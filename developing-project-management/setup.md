@@ -50,7 +50,7 @@ curl -s http://localhost:13491/api/login/me -H "Authorization: Bearer <user_id>"
 curl -s -X POST "http://localhost:13491/api/workspaces/${WORKSPACE_ID}/members" \
   -H "Authorization: Bearer claude" \
   -H "Content-Type: application/json" \
-  -d '{"user_id": "<user_id>", "role": "member"}'
+  -d '{"user_name": "<display_id>", "role": "member"}'
 ```
 
 ### 6. Create PM table
