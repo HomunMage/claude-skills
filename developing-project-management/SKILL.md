@@ -3,7 +3,7 @@ name: developing-project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal lib used by developing-programming, agent-claude-bot, developing-onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.2.0
+version: 0.2.1
 ---
 
 # LatticeCast Project Management
@@ -50,7 +50,7 @@ curl -s "http://localhost:13491/api/tables/{table_id}/rows?limit=20" -H "Authori
 Statuses: `todo` → `in_progress` → `testing` → `review` → `merged` (also `debugging` → `testing` loop)
 
 ```bash
-curl -s -X PUT "http://localhost:13491/api/rows/{row_id}" \
+curl -s -X PUT "http://localhost:13491/api/tables/{table_id}/rows/{row_number}" \
   -H "Authorization: Bearer claude" \
   -H "Content-Type: application/json" \
   -d '{"row_data": {...existing_data, "<status_col_id>": "<NEW_STATUS>"}}'
@@ -74,8 +74,8 @@ curl -s -X POST "http://localhost:13491/api/tables/{table_id}/rows" \
 
 ## Ticket Docs (MinIO)
 
-- `GET /api/tables/{table_id}/rows/{row_id}/doc` — read
-- `PUT /api/tables/{table_id}/rows/{row_id}/doc` — save (text/plain body)
+- `GET /api/tables/{table_id}/rows/{row_number}/doc` — read
+- `PUT /api/tables/{table_id}/rows/{row_number}/doc` — save (text/plain body)
 
 All notes go to the ticket's doc in LatticeCast.
 
@@ -121,17 +121,25 @@ if [ "$UNMERGED" = "0" ]; then
   git merge "$STORY_BRANCH"
   git branch -d "$STORY_BRANCH"
   # Update story ticket → merged
+  STORY_ROW_NUMBER=$(echo "$ALL_ROWS" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+for r in rows:
+    if r[\"row_id\"] == \"${STORY_ROW_ID}\":
+        print(r[\"row_number\"])
+        break
+")
   STORY_DATA=$(echo "$ALL_ROWS" | python3 -c "
 import json, sys
 rows = json.load(sys.stdin)
 for r in rows:
-    if r["row_id"] == "${STORY_ROW_ID}":
-        d = r["row_data"]
-        d["${STATUS_COL_ID}"] = "merged"
-        print(json.dumps({"row_data": d}))
+    if r[\"row_id\"] == \"${STORY_ROW_ID}\":
+        d = r[\"row_data\"]
+        d[\"${STATUS_COL_ID}\"] = \"merged\"
+        print(json.dumps({\"row_data\": d}))
         break
 ")
-  curl -s -X PUT "http://localhost:13491/api/rows/${STORY_ROW_ID}" \
+  curl -s -X PUT "http://localhost:13491/api/tables/${TABLE_ID}/rows/${STORY_ROW_NUMBER}" \
     -H "Authorization: Bearer claude" \
     -H "Content-Type: application/json" \
     -d "$STORY_DATA" > /dev/null

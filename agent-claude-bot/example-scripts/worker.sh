@@ -51,6 +51,21 @@ fi
 ROW_ID=$(echo "$TASK_DESC" | grep -oP 'row_id=\K[a-f0-9-]+' || echo "")
 PARENT_ROW_ID=$(echo "$TASK_DESC" | grep -oP 'parent=\K[a-f0-9-]+' || echo "")
 
+# Look up row_number (integer) for doc/update API calls — API uses row_number not row_id
+ROW_NUMBER=""
+if [ -n "$ROW_ID" ] && [ -n "$TABLE_ID" ]; then
+  ROW_NUMBER=$(curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?limit=200" \
+    -H "Authorization: Bearer claude" | \
+    python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+for r in rows:
+    if r[\'row_id\'] == \'${ROW_ID}\':
+        print(r[\'row_number\'])
+        break
+" 2>/dev/null || echo "")
+fi
+
 # ─── Phase 3: Resolve story branch ──────────────────────────────────────────
 STORY_BRANCH="main"
 if [ -n "$PARENT_ROW_ID" ] && [ -n "$TABLE_ID" ]; then
@@ -113,6 +128,7 @@ fi
 SHARED_CONTEXT="You are Worker ${WORKER_ID}. Working directory: ${PROJECT_DIR}
 PM: ${PM_URL}/api  Table: ${TABLE_ID}  Auth: Bearer claude
 Row ID: ${ROW_ID}
+Row Number: ${ROW_NUMBER}
 Col cache: ${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json
 Story branch: ${STORY_BRANCH}
 
@@ -122,13 +138,14 @@ ${TASK_PROMPT}
 
 RULES:
 - Update ticket status in LatticeCast PM via curl at each phase
-- Append work log to ticket MinIO doc via PUT /api/tables/\${TABLE_ID}/rows/\${ROW_ID}/doc
+- API uses row_number (integer) in URL, NOT row_id (UUID)
+- Append work log to ticket MinIO doc via PUT /api/tables/\${TABLE_ID}/rows/\${ROW_NUMBER}/doc
   Example:
-    CURRENT=\$(curl -s ${PM_URL}/api/tables/\${TABLE_ID}/rows/\${ROW_ID}/doc -H 'Authorization: Bearer claude')
+    CURRENT=\$(curl -s ${PM_URL}/api/tables/\${TABLE_ID}/rows/\${ROW_NUMBER}/doc -H 'Authorization: Bearer claude')
     ENTRY='- \$(date -u +%Y-%m-%dT%H:%M:%SZ) <message>'
     if echo \"\$CURRENT\" | grep -q '## Work Log'; then UPDATED=\"\${CURRENT}\${ENTRY}\"
     else UPDATED=\"\${CURRENT}## Work Log\${ENTRY}\"; fi
-    curl -s -X PUT ${PM_URL}/api/tables/\${TABLE_ID}/rows/\${ROW_ID}/doc \\
+    curl -s -X PUT ${PM_URL}/api/tables/\${TABLE_ID}/rows/\${ROW_NUMBER}/doc \\
       -H 'Authorization: Bearer claude' -H 'Content-Type: text/plain' --data-raw \"\$UPDATED\" > /dev/null
 - All PKs: workspace_id, table_id, row_id, user_id, column_id
 - Row data field: row_data
