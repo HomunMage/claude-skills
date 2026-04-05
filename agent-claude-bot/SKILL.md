@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.17.3
+version: 0.17.4
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -164,7 +164,7 @@ Write DONE to trigger file for orchestrator.
 - **If stuck after 3 attempts:** write BLOCKED to the trigger file, stop.
 - **All tests must pass** before committing.
 - **Don't break existing tests.**
-- **Commit messages:** `ticket: <verb> <what>` (e.g., `ticket: add user auth endpoint`)
+- **Commit messages:** `ticket-<row_number>: <verb> <what>` (e.g., `ticket-42: add user auth endpoint`)
 - **Issue branches base off story branch, not main.**
 - **Story branches base off main.**
 - **CRITICAL: Continuously update the ticket doc.** Use `PUT /api/tables/{table_id}/rows/{row_number}/doc` (row_number, NOT row_id). Append timestamped entries after EVERY action. Empty doc after work = FAILED.
