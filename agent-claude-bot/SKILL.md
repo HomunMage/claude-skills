@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.16.0
+version: 0.17.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -88,11 +88,26 @@ Each worker operates in its own worktree — no conflicts.
 
 ### Step 3: Pick Ticket → IMMEDIATELY update to `in_progress`
 - Query LatticeCast PM for `todo` issues (type=task or type=bug)
-- **Update PM status → `in_progress` FIRST** before doing anything else
-- **Append to doc**: `- {timestamp} Picked up by W{id}`
-- **Read the issue's doc** from MinIO: `GET /api/tables/{table_id}/rows/{row_id}/doc`
-- The doc contains implementation instructions written during planning — **follow them**
+- **Update PM status → `in_progress` FIRST** via `PUT /api/tables/{table_id}/rows/{row_number}`
+- **Append to doc** via `PUT /api/tables/{table_id}/rows/{row_number}/doc`: `- {timestamp} Picked up by W{id}`
+- **Read the issue's doc** — the doc contains implementation instructions from planning
 - Work on ONLY that ticket
+
+**IMPORTANT: API uses `row_number` (integer) in URL, NOT `row_id` (UUID).**
+
+### Step 3.5: Check if Test Ticket
+- Check the ticket's Tags column in `row_data`
+- If tags contain `"test"` → this is a **test ticket**, go to Step 4T instead of Step 4
+- If tags do NOT contain `"test"` → normal implementation, go to Step 4
+
+### Step 4T: Test Ticket (tags contain "test")
+Instead of writing application code:
+1. Start browser: `docker compose --profile browser up -d browser`
+2. Write a Playwright test script in `browser/test_{feature}.py` if one doesn't exist
+3. Run: `docker compose exec browser python3 browser/test_{feature}.py`
+4. Screenshots saved to `.browser/`
+5. Append screenshot paths + pass/fail to ticket doc
+6. Go to Step 5 (commit the test script)
 
 ### Step 4: Implement — MUST update doc continuously
 - Make the smallest possible change to complete the ticket
@@ -102,13 +117,14 @@ Each worker operates in its own worktree — no conflicts.
   - `- {timestamp} Modifying {file}: {what changed}`
   - `- {timestamp} Decision: {why I chose X over Y}`
 - Stay in scope — don't refactor unrelated code
+- **After ANY FE visual change**, take a Playwright snapshot via `docker compose exec browser` and verify it looks correct
 
 ### Step 5: Test, Format, Lint, Commit
 Use `Skill(developing-programming)` workflow:
-- Update PM status → `testing`, **append to doc**: `- {timestamp} Running tests`
-- Run tests (if fail → `debugging`, **append to doc**: `- {timestamp} Tests failed: {error}`)
+- Update PM status → `testing` via `PUT /api/tables/{table_id}/rows/{row_number}`
+- Run tests (if fail → `debugging`, append error to doc)
 - Format + lint
-- Commit → `review`, **append to doc**: `- {timestamp} Committed {sha}`
+- Commit → update PM status to `review`
 
 ### Step 6: Merge Issue into Story Branch & Cleanup
 
@@ -151,8 +167,10 @@ Write DONE to trigger file for orchestrator.
 - **Commit messages:** `ticket: <verb> <what>` (e.g., `ticket: add user auth endpoint`)
 - **Issue branches base off story branch, not main.**
 - **Story branches base off main.**
-- **CRITICAL: Continuously update the ticket doc in MinIO.** The doc is the single source of truth for what happened. After EVERY significant action (reading code, creating file, making a decision, running tests, hitting an error), append a timestamped entry to the doc via `PUT /api/tables/{table_id}/rows/{row_id}/doc`. If a ticket's doc is empty after work is done, the worker has FAILED. The user reads these docs to understand progress — treat them like a Notion task page.
-- **Test tickets** (tags contain `test`): Instead of writing code, run Playwright snapshot test via `docker compose exec browser python3 <test_script>`. Save screenshots to `.browser/`. Append screenshot paths and pass/fail results to ticket doc. If no test script exists, write one in `browser/` directory first.
+- **CRITICAL: Continuously update the ticket doc.** Use `PUT /api/tables/{table_id}/rows/{row_number}/doc` (row_number, NOT row_id). Append timestamped entries after EVERY action. Empty doc after work = FAILED.
+- **CRITICAL: FE changes MUST have `.browser/` snapshot.** Run `docker compose exec browser python3 -c "..."` with Playwright to screenshot. If the snapshot looks wrong, fix before committing.
+- **API uses row_number (integer) in URL paths**, not row_id (UUID). Example: `PUT /api/tables/{tid}/rows/42` not `PUT /api/rows/{uuid}`.
+- **If stuck or timing out:** mark remaining work in ticket doc, commit what you have, set status to `review` (not `merged`), signal DONE. Don't loop endlessly.
 
 ## Usage
 
