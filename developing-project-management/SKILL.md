@@ -3,7 +3,7 @@ name: developing-project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal lib used by developing-programming, agent-claude-bot, developing-onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.2.1
+version: 0.3.0
 ---
 
 # LatticeCast Project Management
@@ -11,10 +11,38 @@ version: 0.2.1
 Internal skill providing PM operations. Other skills compose via `Skill(developing-project-management)`.
 
 **URL**: `http://localhost:13491`
-**Auth**: `Authorization: Bearer <user_id>` (dev mode: Bearer value = user_id, auto-created)
+**Auth**: `Authorization: Bearer <identifier>` — identifier can be UUID, display_id, or email (resolved in that order)
 
-> **First-time setup?** See [setup.md](setup.md) — auth explanation, workspace creation, member management.
-> **Full API reference?** See [endpoints.md](endpoints.md) — all CRUD endpoints, query/update scripts, cascade logic.
+> **First-time setup?** See [setup.md](setup.md)
+> **Full API reference?** See [endpoints.md](endpoints.md)
+
+## ID Resolution (everywhere)
+
+All identifiers (Bearer token, URL paths, member lookup) resolve in order:
+1. **UUID** — `a712f960-8f9f-4b9d-8d12-3be3cd2d75d1`
+2. **display_id** — `lattice`, `homun-lang-002` (case-insensitive)
+3. **email** — `user@example.com` (case-insensitive)
+
+```bash
+# All equivalent:
+curl -H "Authorization: Bearer a712f960-..."      # UUID
+curl -H "Authorization: Bearer lattice"            # display_id
+curl -H "Authorization: Bearer user@example.com"   # email
+```
+
+## Row Addressing
+
+Rows use **row_number** (integer, auto-increment per table), NOT row_id (UUID).
+
+```
+PUT /api/tables/{table_id}/rows/{row_number}
+GET /api/tables/{table_id}/rows/{row_number}/doc
+```
+
+Use `filter_json` to query by JSONB field without pagination issues:
+```bash
+curl "/api/tables/{id}/rows?filter_json={\"<status_col>\":\"todo\"}&limit=50"
+```
 
 ## Ensure Running
 
@@ -22,132 +50,61 @@ Internal skill providing PM operations. Other skills compose via `Skill(developi
 curl -s http://localhost:13491/api/status 2>/dev/null | grep -q '"ok"'
 ```
 
-If not running → tell user to `docker compose up -d backend frontend`. **Do NOT fallback to file-based tracking.**
+If not running → tell user to `docker compose up -d`. **Do NOT fallback to file-based tracking.**
 
 ## Setup Project (used by developing-onboarding)
 
-See [setup.md](setup.md) for full sequence. Summary:
+See [setup.md](setup.md). Summary:
 
 1. `GET /api/login/me` -H "Bearer claude" (create bot user)
 2. `POST /api/workspaces` (create workspace)
 3. Ask user for team member IDs
-4. `GET /api/login/me` + `POST /api/workspaces/{id}/members` (add members)
+4. `POST /api/workspaces/{id}/members` with `{"user_name": "<display_id>", "role": "member"}`
 5. `POST /api/tables/template/pm` (create PM table)
 6. Report board URL
 
-## Query Tickets (used by developing-programming pre-flight)
+## Add Member
 
-See [endpoints.md](endpoints.md) "Query Tickets" for full script. Quick version:
+Provide ONE of `user_id` (UUID), `user_name` (display_id), `user_email`:
 
 ```bash
-curl -s http://localhost:13491/api/tables -H "Authorization: Bearer claude"
-# Find table matching repo name, then:
-curl -s "http://localhost:13491/api/tables/{table_id}/rows?limit=20" -H "Authorization: Bearer claude"
+curl -X POST "/api/workspaces/{workspace_id}/members" \
+  -H "Authorization: Bearer claude" \
+  -d '{"user_name": "lattice", "role": "member"}'
+```
+
+## Query Tickets
+
+```bash
+# All rows (default: newest first)
+curl "/api/tables/{table_id}/rows?limit=100" -H "Authorization: Bearer claude"
+
+# Filter by status (server-side JSONB containment)
+curl "/api/tables/{table_id}/rows?filter_json={\"<status_col>\":\"todo\"}&limit=50"
 ```
 
 ## Update Ticket Status
 
-Statuses: `todo` → `in_progress` → `testing` → `review` → `merged` (also `debugging` → `testing` loop)
+Statuses: `todo` → `in_progress` → `testing` → `review` → `merged` (also `debugging` loop)
 
 ```bash
-curl -s -X PUT "http://localhost:13491/api/tables/{table_id}/rows/{row_number}" \
+curl -X PUT "/api/tables/{table_id}/rows/{row_number}" \
   -H "Authorization: Bearer claude" \
-  -H "Content-Type: application/json" \
-  -d '{"row_data": {...existing_data, "<status_col_id>": "<NEW_STATUS>"}}'
+  -d '{"row_data": {...existing_data, "<status_col_id>": "in_progress"}}'
 ```
-
-See [endpoints.md](endpoints.md) "Update Ticket Status" for the full script that looks up by ticket key.
 
 ## Default Time Rule
 
-When creating a ticket, if `Start Date` or `Due Date` is not explicitly specified, **default both to today's date** (e.g. `2026-04-03`). Never leave date fields empty.
-
-## Create Ticket
-
-```bash
-TODAY=$(date -u +%Y-%m-%d)
-curl -s -X POST "http://localhost:13491/api/tables/{table_id}/rows" \
-  -H "Authorization: Bearer claude" \
-  -H "Content-Type: application/json" \
-  -d '{"row_data": {"<title_col_id>": "<title>", "<type_col_id>": "task", "<status_col_id>": "todo", "<priority_col_id>": "medium", "<start_date_col_id>": "'$TODAY'", "<due_date_col_id>": "'$TODAY'"}}'
-```
+When creating a ticket, if `Start Date` or `Due Date` not specified, **default both to today**. Never leave empty.
 
 ## Ticket Docs (MinIO)
 
-- `GET /api/tables/{table_id}/rows/{row_number}/doc` — read
-- `PUT /api/tables/{table_id}/rows/{row_number}/doc` — save (text/plain body)
-
-All notes go to the ticket's doc in LatticeCast.
-
-## Story Branch Management
-
-Story branches bridge issues and main. Issues branch off the story branch; when all issues are merged, the story merges into main.
-
-### Create Story Branch from Main
-
 ```bash
-STORY_KEY="<story-key-lowercase>"  # e.g. l-5
-STORY_BRANCH="story/${STORY_KEY}"
-
-git checkout main
-git checkout -b "$STORY_BRANCH" 2>/dev/null || git checkout "$STORY_BRANCH"
+GET  /api/tables/{table_id}/rows/{row_number}/doc   # read markdown
+PUT  /api/tables/{table_id}/rows/{row_number}/doc   # save markdown (text/plain body)
 ```
 
-### Merge Story into Main (when all issues merged)
-
-After merging an issue into its story branch, check whether all sibling issues are done, then merge story into main:
-
-```bash
-TABLE_ID="<table_id>"
-STORY_ROW_ID="<story_row_id>"
-PARENT_COL_ID="<parent_col_id>"
-STATUS_COL_ID="<status_col_id>"
-STORY_BRANCH="story/<story-key-lowercase>"
-
-ALL_ROWS=$(curl -s "http://localhost:13491/api/tables/${TABLE_ID}/rows?limit=200" \
-  -H "Authorization: Bearer claude")
-
-UNMERGED=$(echo "$ALL_ROWS" | python3 -c "
-import json, sys
-rows = json.load(sys.stdin)
-unmerged = [r for r in rows
-            if r["row_data"].get("${PARENT_COL_ID}") == "${STORY_ROW_ID}"
-            and r["row_data"].get("${STATUS_COL_ID}") != "merged"]
-print(len(unmerged))
-")
-
-if [ "$UNMERGED" = "0" ]; then
-  git checkout main
-  git merge "$STORY_BRANCH"
-  git branch -d "$STORY_BRANCH"
-  # Update story ticket → merged
-  STORY_ROW_NUMBER=$(echo "$ALL_ROWS" | python3 -c "
-import json, sys
-rows = json.load(sys.stdin)
-for r in rows:
-    if r[\"row_id\"] == \"${STORY_ROW_ID}\":
-        print(r[\"row_number\"])
-        break
-")
-  STORY_DATA=$(echo "$ALL_ROWS" | python3 -c "
-import json, sys
-rows = json.load(sys.stdin)
-for r in rows:
-    if r[\"row_id\"] == \"${STORY_ROW_ID}\":
-        d = r[\"row_data\"]
-        d[\"${STATUS_COL_ID}\"] = \"merged\"
-        print(json.dumps({\"row_data\": d}))
-        break
-")
-  curl -s -X PUT "http://localhost:13491/api/tables/${TABLE_ID}/rows/${STORY_ROW_NUMBER}" \
-    -H "Authorization: Bearer claude" \
-    -H "Content-Type: application/json" \
-    -d "$STORY_DATA" > /dev/null
-  echo "Story merged into main."
-else
-  echo "Not all issues merged yet ($UNMERGED remaining). Story branch stays open."
-fi
-```
+All notes go to ticket docs. Workers MUST update docs continuously.
 
 ## Status Flow
 
@@ -158,5 +115,3 @@ todo → in_progress → testing → review → merged
 
 Auto-cascade: all children merged → parent auto-merged
 ```
-
-After marking a ticket `merged`, run cascade check — see [endpoints.md](endpoints.md) "Auto-Cascade".
