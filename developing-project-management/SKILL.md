@@ -3,7 +3,7 @@ name: developing-project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal lib used by developing-programming, agent-claude-bot, developing-onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.3.0
+version: 0.3.1
 ---
 
 # LatticeCast Project Management
@@ -101,8 +101,27 @@ When creating a ticket, if `Start Date` or `Due Date` not specified, **default b
 
 ```bash
 GET  /api/tables/{table_id}/rows/{row_number}/doc   # read markdown
-PUT  /api/tables/{table_id}/rows/{row_number}/doc   # save markdown (text/plain body)
+PUT  /api/tables/{table_id}/rows/{row_number}/doc   # save markdown (text/plain or multipart file)
 ```
+
+### Recommended workflow: use `.tmp/issue/` as local scratch
+
+```bash
+# 1. Download doc to local file
+mkdir -p .tmp/issue/{row_number}
+curl -s "/api/tables/{table_id}/rows/{row_number}/doc" \
+  -H "Authorization: Bearer claude" > .tmp/issue/{row_number}/doc.md
+
+# 2. Edit locally (append, rewrite, whatever)
+echo "- $(date -u +%Y-%m-%dT%H:%M:%SZ) Started by W1" >> .tmp/issue/{row_number}/doc.md
+
+# 3. Upload back
+curl -X PUT "/api/tables/{table_id}/rows/{row_number}/doc" \
+  -H "Authorization: Bearer claude" \
+  -F file=@.tmp/issue/{row_number}/doc.md
+```
+
+This avoids painful `--data-raw` escaping. Workers should use this pattern for all doc updates.
 
 All notes go to ticket docs. Workers MUST update docs continuously.
 
