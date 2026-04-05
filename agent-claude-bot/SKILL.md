@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.17.1
+version: 0.17.2
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -170,7 +170,7 @@ Write DONE to trigger file for orchestrator.
 - **CRITICAL: Continuously update the ticket doc.** Use `PUT /api/tables/{table_id}/rows/{row_number}/doc` (row_number, NOT row_id). Append timestamped entries after EVERY action. Empty doc after work = FAILED.
 - **CRITICAL: FE changes MUST have `.browser/` snapshot.** Run `docker compose exec browser python3 -c "..."` with Playwright to screenshot. If the snapshot looks wrong, fix before committing.
 - **API uses row_number (integer) in URL paths**, not row_id (UUID). Example: `PUT /api/tables/{tid}/rows/42` not `PUT /api/rows/{uuid}`.
-- **If stuck:** diagnose the root cause first — read the error, check assumptions. Append the error + your analysis to the ticket doc. Try a different approach. Only after 3 failed attempts: set status to `debugging`, write what blocked you in the doc, signal BLOCKED.
+- **If stuck:** diagnose why, append error + analysis to ticket doc, try different approach. If can't finish in time: commit partial work, log what's done and what's left in doc, set status to `review`, signal DONE. Next worker picks up from where you left off by reading the doc.
 
 ## Usage
 
