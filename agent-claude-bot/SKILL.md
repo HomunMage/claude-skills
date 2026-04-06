@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.22.0
+version: 0.23.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -211,22 +211,29 @@ The [example-scripts/](example-scripts/) directory contains **reference implemen
 
 ```
 tmux session: "<project-folder-name>"
- ├── window 0: orchestrator.sh (pure bash+python — queries PM, assigns tasks. NO LLM.)
- ├── window 1: worker.sh #1   (Sonnet — picks ticket, codes, tests, commits)
- ├── window 2: worker.sh #2   (Sonnet — picks ticket, codes, tests, commits)
+ ├── window 0: orchestrator
+ ├── window 1: w1-task-182    ← worker #1 on task row 182
+ ├── window 2: w2-bug-45      ← worker #2 on bug row 45
  └── ...N workers
 ```
 
+Window names: `w{N}-{type}-{row_number}` — shows what each worker is doing.
+
+### Startup
+
+1. Cache column IDs to `_col_cache.json`
+2. **Recovery**: check `in_progress` tickets. If no tmux window `*-{rn}` exists → orphaned → reset to `todo`
+
 ### Orchestrator Cycle (50 rounds max)
 
-**CRITICAL: Orchestrator uses pure bash+python for ticket querying. NEVER use haiku/LLM to query PM — it hallucinates ALL_DONE.**
+**CRITICAL: Pure bash+python. NEVER use LLM to query PM.**
 
 ```
-1. Query: curl PM API + python filter (status=todo, type=task/bug) — NO LLM
-2. Spawn: launch N workers in tmux windows
-3. Monitor: poll PM status (in_progress→done/debugging) → kill workers if >900s
-4. Collect: read DONE/BLOCKED results
-5. Sleep 5s → next cycle
+1. Query: curl PM API + python filter (status=todo, type=task/bug)
+2. Spawn: launch N workers in tmux windows (name: w{N}-{type}-{rn})
+3. Wait: poll PM every 10s until status leaves (todo,in_progress,testing)
+4. Cleanup: kill worker windows
+5. Sleep 3 → next cycle
 ```
 
 ### Worker Cycle (one ticket per round)
