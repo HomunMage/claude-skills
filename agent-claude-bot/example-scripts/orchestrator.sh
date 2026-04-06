@@ -49,7 +49,7 @@ else:
             print(f'TASK{i+1}: {d.get(kid,\"?\")} {d.get(tid,\"(untitled)\")} (row_number={r[\"row_number\"]} parent={d.get(pid,\"\")})')
         else:
             print(f'TASK{i+1}: IDLE')
-" > "${PROJECT_DIR}/_task_queue" 2>/dev/null
+" 2>/dev/null
 }
 
 # ─── Spawn Worker ────────────────────────────────────────────────────────────
@@ -124,19 +124,19 @@ while [ "$CYCLE" -lt "$MAX_CYCLES" ]; do
   # Clean stale git lock
   rmdir "${PROJECT_DIR}/_git.lock" 2>/dev/null || true
 
-  # Plan tasks
+  # Plan tasks (output to variable, no file)
   log "Planning tasks..."
-  plan_tasks
+  TASK_OUTPUT=$(plan_tasks)
 
-  if grep -q "ALL_DONE" "${PROJECT_DIR}/_task_queue" 2>/dev/null; then
+  if echo "$TASK_OUTPUT" | grep -q "ALL_DONE"; then
     log "ALL TICKETS COMPLETE! Exiting."
     exit 0
   fi
 
-  # Parse tasks and spawn workers
+  # Parse and spawn workers
   ACTIVE_WORKERS=""
   for i in $(seq 1 "$NUM_WORKERS"); do
-    TASK=$(grep "^TASK${i}:" "${PROJECT_DIR}/_task_queue" 2>/dev/null | sed "s/^TASK${i}: //")
+    TASK=$(echo "$TASK_OUTPUT" | grep "^TASK${i}:" | sed "s/^TASK${i}: //")
 
     if [ -n "$TASK" ] && [ "$TASK" != "IDLE" ]; then
       spawn_worker "$i" "$TASK"
