@@ -3,7 +3,7 @@ name: developing-project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal lib used by developing-programming, agent-claude-bot, developing-onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.3.1
+version: 0.4.0
 ---
 
 # LatticeCast Project Management
@@ -85,12 +85,18 @@ curl "/api/tables/{table_id}/rows?filter_json={\"<status_col>\":\"todo\"}&limit=
 
 ## Update Ticket Status
 
+**ALWAYS use PUT to update existing rows. NEVER use POST (POST creates a new row with auto-generated Key, causing duplicates).**
+
 Statuses: `todo` → `in_progress` → `testing` → `review` → `merged` (also `debugging` loop)
 
 ```bash
+# CORRECT: PUT updates existing row
 curl -X PUT "/api/tables/{table_id}/rows/{row_number}" \
   -H "Authorization: Bearer claude" \
   -d '{"row_data": {...existing_data, "<status_col_id>": "in_progress"}}'
+
+# WRONG: POST creates a NEW row — causes duplicate TO-* keys!
+# curl -X POST "/api/tables/{table_id}/rows" ...  ← NEVER DO THIS FOR STATUS UPDATES
 ```
 
 ## Default Time Rule
