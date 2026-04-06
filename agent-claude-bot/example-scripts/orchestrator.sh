@@ -69,9 +69,9 @@ for r in rows:
   ACTIVE_WINDOWS=$(tmux list-windows -t "${SESSION}" -F '#{window_name}' 2>/dev/null || echo "")
 
   for rn in $ORPHANS; do
-    # Worker windows are named w1, w2, etc. — can't match exact ticket.
-    # But on fresh startup, there are ZERO worker windows → all in_progress are orphaned.
-    if ! echo "$ACTIVE_WINDOWS" | grep -q "^w"; then
+    # Worker windows are named w{N}-{type}-{rn} e.g. w1-task-182
+    # Check if any window contains this row_number
+    if ! echo "$ACTIVE_WINDOWS" | grep -q "\-${rn}$"; then
       # No worker windows at all → this ticket is orphaned
       local cur
       cur=$(curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" | \
@@ -121,8 +121,10 @@ spawn_worker() {
   local WID=$1 TASK="$2"
   # Escape single quotes in TASK to prevent shell injection in tmux command
   local SAFE_TASK="${TASK//\'/\'\\\'\'}"
+  local RN=$(echo "$TASK" | grep -oP 'row_number=\K[0-9]+' || echo "?")
+  local TTYPE=$(echo "$TASK" | head -c 20 | tr ' ' '-' | tr -cd 'a-z0-9-')
   log "Spawn W${WID}: ${TASK}"
-  tmux new-window -t "${SESSION}" -n "w${WID}" \
+  tmux new-window -t "${SESSION}" -n "w${WID}-${TTYPE}-${RN}" \
     "TABLE_ID='${TABLE_ID}' bash ${SCRIPT_DIR}/worker.sh '${PROJECT_DIR}' ${WID} '${SAFE_TASK}'"
 }
 
@@ -197,9 +199,11 @@ while [ "$CYCLE" -lt "$MAX_CYCLES" ]; do
   # Step 4: Wait for ALL workers to finish
   wait_finish "$RNS"
 
-  # Step 5: Cleanup worker windows
+  # Step 5: Cleanup worker windows (match w{N}-* pattern)
   for i in $ACTIVE; do
-    tmux kill-window -t "${SESSION}:w${i}" 2>/dev/null || true
+    for win in $(tmux list-windows -t "${SESSION}" -F '#{window_name}' 2>/dev/null | grep "^w${i}-"); do
+      tmux kill-window -t "${SESSION}:${win}" 2>/dev/null || true
+    done
   done
 
   sleep 3
