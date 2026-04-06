@@ -66,9 +66,11 @@ else:
 # ─── Step 3: Spawn worker in tmux window ──────────────────────────────────────
 spawn_worker() {
   local WID=$1 TASK="$2"
+  # Escape single quotes in TASK to prevent shell injection in tmux command
+  local SAFE_TASK="${TASK//\'/\'\\\'\'}"
   log "Spawn W${WID}: ${TASK}"
   tmux new-window -t "${SESSION}" -n "w${WID}" \
-    "TABLE_ID='${TABLE_ID}' bash ${SCRIPT_DIR}/worker.sh '${PROJECT_DIR}' ${WID} '${TASK}'"
+    "TABLE_ID='${TABLE_ID}' bash ${SCRIPT_DIR}/worker.sh '${PROJECT_DIR}' ${WID} '${SAFE_TASK}'"
 }
 
 # ─── Step 4: Wait for ALL workers to FINISH ───────────────────────────────────
