@@ -30,7 +30,6 @@ fi
 tmux kill-session -t "$SESSION" 2>/dev/null || true
 
 # Clean up stale files
-rm -f "${PROJECT_DIR}/_trigger_"* "${PROJECT_DIR}/_task_queue"
 rmdir "${PROJECT_DIR}/_git.lock" 2>/dev/null || true
 
 mkdir -p "${PROJECT_DIR}/.tmp/out"

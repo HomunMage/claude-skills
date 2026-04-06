@@ -60,92 +60,51 @@ spawn_worker() {
 
   log "Spawning worker ${WORKER_ID}: ${TASK}"
 
-  rm -f "${PROJECT_DIR}/_trigger_${WORKER_ID}"
+  
 
   tmux new-window -t "${SESSION}" -n "${WINDOW_NAME}" \
     "bash ${SCRIPT_DIR}/worker.sh '${PROJECT_DIR}' ${WORKER_ID} '${TASK}'; echo 'Worker ${WORKER_ID} done. Press enter.'; read"
 }
 
-# ─── Wait for Workers ────────────────────────────────────────────────────────
-# Poll trigger files, kill workers that exceed 900s timeout
+# ─── Wait for Workers (poll PM status, no trigger files) ─────────────────────
+# Workers set PM status to done/debugging when finished. Poll PM to detect.
 wait_for_workers() {
-  local ACTIVE_WORKERS="$1"
+  local ACTIVE_ROW_NUMBERS="$1"
   local TIMEOUT=900
   local ELAPSED=0
-  local ALL_DONE=false
 
-  while [ "$ELAPSED" -lt "$TIMEOUT" ] && [ "$ALL_DONE" = "false" ]; do
-    ALL_DONE=true
-    for i in $ACTIVE_WORKERS; do
-      if [ ! -f "${PROJECT_DIR}/_trigger_${i}" ]; then
-        ALL_DONE=false
+  while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    # Check if all active tickets are no longer in_progress
+    local ALL_DONE
+    ALL_DONE=$(curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" 2>/dev/null | python3 -c "
+import sys, json
+rows = json.load(sys.stdin)
+cols = json.loads(open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json').read())
+sid = cols.get('Status','')
+active = '${ACTIVE_ROW_NUMBERS}'.split()
+all_done = True
+for rn in active:
+    r = next((r for r in rows if str(r['row_number']) == rn), None)
+    if r and r['row_data'].get(sid) == 'in_progress':
+        all_done = False
         break
-      fi
-    done
+print('yes' if all_done else 'no')
+" 2>/dev/null)
 
-    if [ "$ALL_DONE" = "false" ]; then
-      sleep 10
-      ELAPSED=$((ELAPSED + 10))
-
-      # Status log every 60s
-      if [ $((ELAPSED % 60)) -eq 0 ]; then
-        local STATUS=""
-        for i in $ACTIVE_WORKERS; do
-          if [ -f "${PROJECT_DIR}/_trigger_${i}" ]; then
-            STATUS="${STATUS} W${i}:$(cat "${PROJECT_DIR}/_trigger_${i}")"
-          else
-            STATUS="${STATUS} W${i}:running"
-          fi
-        done
-        log "Status (${ELAPSED}s):${STATUS}"
-      fi
+    if [ "$ALL_DONE" = "yes" ]; then
+      log "All workers finished."
+      return 0
     fi
+
+    sleep 10
+    ELAPSED=$((ELAPSED + 10))
+    [ $((ELAPSED % 60)) -eq 0 ] && log "Waiting... (${ELAPSED}s)"
   done
 
-  # Kill any workers that didn't finish in time
-  if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
-    log "TIMEOUT (${TIMEOUT}s): Killing remaining workers"
-    for i in $ACTIVE_WORKERS; do
-      if [ ! -f "${PROJECT_DIR}/_trigger_${i}" ]; then
-        log "Killing worker ${i} (timed out)"
-        tmux kill-window -t "${SESSION}:worker-${i}" 2>/dev/null || true
-        echo "TIMEOUT" > "${PROJECT_DIR}/_trigger_${i}"
-      fi
-    done
-  fi
-}
-
-# ─── Collect Results ─────────────────────────────────────────────────────────
-collect_results() {
-  local ACTIVE_WORKERS="$1"
-  local HAS_BLOCKED=false
-  local HAS_ALL_COMPLETE=false
-
-  for i in $ACTIVE_WORKERS; do
-    local TRIGGER="${PROJECT_DIR}/_trigger_${i}"
-    if [ -f "$TRIGGER" ]; then
-      local RESULT
-      RESULT=$(cat "$TRIGGER")
-      log "Worker ${i} result: ${RESULT}"
-      case "$RESULT" in
-        BLOCKED) HAS_BLOCKED=true ;;
-        ALL_COMPLETE) HAS_ALL_COMPLETE=true ;;
-        TIMEOUT) HAS_BLOCKED=true ;;
-      esac
-    else
-      log "Worker ${i}: no trigger file (crashed?)"
-      HAS_BLOCKED=true
-    fi
-    rm -f "$TRIGGER"
-    tmux kill-window -t "${SESSION}:worker-${i}" 2>/dev/null || true
+  log "TIMEOUT (${TIMEOUT}s): Killing remaining workers"
+  for rn in $ACTIVE_ROW_NUMBERS; do
+    tmux kill-window -t "${SESSION}:worker-*" 2>/dev/null || true
   done
-
-  if [ "$HAS_ALL_COMPLETE" = "true" ]; then
-    return 2
-  elif [ "$HAS_BLOCKED" = "true" ]; then
-    return 1
-  fi
-  return 0
 }
 
 # ─── Main Loop ───────────────────────────────────────────────────────────────

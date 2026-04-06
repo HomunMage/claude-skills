@@ -8,7 +8,7 @@ PROJECT_DIR="${1:?Usage: worker.sh <project_dir> <worker_id> [task_description]}
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 WORKER_ID="${2:?Worker ID required}"
 TASK_DESC="${3:-}"
-TRIGGER_FILE="${PROJECT_DIR}/_trigger_${WORKER_ID}"
+# No trigger files — orchestrator polls PM status instead
 LOG_FILE="${PROJECT_DIR}/.tmp/out/worker_${WORKER_ID}.log"
 GIT_LOCK="${PROJECT_DIR}/_git.lock"
 PM_URL="http://localhost:13491"
@@ -64,7 +64,7 @@ step() {
 }
 
 # If any step fails, signal BLOCKED and exit
-trap 'log "Pipeline failed. Writing BLOCKED."; pm_set_status "debugging"; pm_append_doc "W${WORKER_ID} BLOCKED — pipeline failed"; git stash 2>/dev/null; echo "BLOCKED" > "$TRIGGER_FILE"; exit 1' ERR
+trap 'log "Pipeline failed."; pm_set_status "debugging"; pm_append_doc "W${WORKER_ID} BLOCKED — pipeline failed"; exit 1' ERR
 
 log "Worker ${WORKER_ID} starting..."
 [ -n "$TASK_DESC" ] && log "Task: ${TASK_DESC}"
@@ -194,5 +194,5 @@ pm_set_status "done"
 pm_append_doc "W${WORKER_ID} finished"
 
 # ─── Signal done ─────────────────────────────────────────────────────────────
-echo "DONE" > "$TRIGGER_FILE"
+# PM status already set to done — orchestrator will detect via poll
 log "W${WORKER_ID} finished: DONE"

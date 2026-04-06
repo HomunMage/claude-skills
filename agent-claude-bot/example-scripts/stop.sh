@@ -10,7 +10,6 @@ echo "Stopping tmux session: ${SESSION}"
 tmux kill-session -t "$SESSION" 2>/dev/null && echo "Stopped." || echo "No session found."
 
 # Clean up orphan files
-rm -f "${PROJECT_DIR}/_trigger_"* "${PROJECT_DIR}/_task_queue"
 rmdir "${PROJECT_DIR}/_git.lock" 2>/dev/null || true
 
 echo "Cleanup complete."

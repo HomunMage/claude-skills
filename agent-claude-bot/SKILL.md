@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.19.1
+version: 0.20.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -151,17 +151,17 @@ git branch -d "$STORY_BRANCH"
 # Update story PM status → merged
 ```
 
-If siblings are **not all merged**, leave the story branch open and signal DONE.
+If siblings are **not all merged**, leave the story branch open.
 
-### Step 8: Signal Done
-Write DONE to trigger file for orchestrator.
+### Step 8: Done
+Worker sets PM status to `done`. Orchestrator polls PM to detect completion — no trigger files needed.
 
 ## Worker Rules
 
 - **ONE ticket per session.** Do not batch multiple tickets.
 - **Never ask questions.** Make reasonable decisions and document them in the commit message.
 - **Stay in your assigned scope.** Don't touch files outside your task boundary.
-- **If stuck after 3 attempts:** write BLOCKED to the trigger file, stop.
+- **If stuck after 3 attempts:** set PM status to `debugging`, stop.
 - **All tests must pass** before committing.
 - **Don't break existing tests.**
 - **Commit messages:** `ticket-<row_number>: <verb> <what>` (e.g., `ticket-42: add user auth endpoint`)
@@ -224,7 +224,7 @@ tmux session: "<project-folder-name>"
 ```
 1. Query: curl PM API + python filter (status=todo, type=task/bug) — NO LLM
 2. Spawn: launch N workers in tmux windows
-3. Monitor: poll _trigger_{id} files → kill workers if >900s
+3. Monitor: poll PM status (in_progress→done/debugging) → kill workers if >900s
 4. Collect: read DONE/BLOCKED results
 5. Sleep 5s → next cycle
 ```
@@ -239,7 +239,7 @@ tmux session: "<project-folder-name>"
 5. Skill(developing-programming): test → format → lint → commit
 6. Merge: merge issue branch into story branch, remove worktree, PM → merged
 7. Check: if all sibling issues merged → merge story into main, PM story → merged
-8. Signal: write DONE to _trigger_{id}
+8. Done: PM status set to done (orchestrator detects via poll)
 ```
 
 ## Coordination
@@ -248,7 +248,7 @@ tmux session: "<project-folder-name>"
 |-----------|-----|-----|
 | **Git Worktree** | `git worktree add .tmp/worker_{id}` | Isolated branch per worker |
 | **Git Lock** | `mkdir _git.lock` (atomic) | Only one worker merges at a time |
-| **Trigger Files** | `_trigger_{id}` with DONE/BLOCKED | Workers signal completion |
+| **PM Status Poll** | Orchestrator polls PM for `done`/`debugging` | Workers signal via PM status |
 | **LatticeCast PM** | HTTP API for ticket status | Single source of truth for tickets |
 | **Timeout** | 900s (15 min) | Kill stuck workers |
 
