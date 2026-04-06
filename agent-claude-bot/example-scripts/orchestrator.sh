@@ -63,7 +63,7 @@ spawn_worker() {
   
 
   tmux new-window -t "${SESSION}" -n "${WINDOW_NAME}" \
-    "bash ${SCRIPT_DIR}/worker.sh '${PROJECT_DIR}' ${WORKER_ID} '${TASK}'; echo 'Worker ${WORKER_ID} done. Press enter.'; read"
+    "bash ${SCRIPT_DIR}/worker.sh '${PROJECT_DIR}' ${WORKER_ID} '${TASK}'"
 }
 
 # ─── Wait for Workers (poll PM status, no trigger files) ─────────────────────
