@@ -2,10 +2,12 @@
 # orchestrator.sh — pure rule-based, NO LLM
 #
 # PSEUDO CODE:
+#   startup:
+#     - cache column IDs to _col_cache.json (worker reads this)
 #   loop (max_cycles):
-#     1. query PM for todo tasks (type=task/bug, status=todo)
+#     1. query PM for todo tasks (type=task/bug, status=todo) using filter_json
 #     2. if none → ALL DONE, exit
-#     3. spawn N workers in tmux windows
+#     3. spawn N workers in tmux windows (pass TABLE_ID env, escape quotes in task)
 #     4. wait_finish: poll PM every 10s until ALL spawned rows
 #        leave (todo, in_progress, testing) → become (done, debugging, review, merged)
 #        - "todo" means worker hasn't picked it up yet — KEEP WAITING
@@ -34,6 +36,13 @@ AUTH="Authorization: Bearer claude"
 mkdir -p "${PROJECT_DIR}/.tmp/out"
 
 log() { echo "$(date '+%H:%M:%S') [ORCH] $1" | tee -a "$LOG_FILE"; }
+
+# Cache column IDs at startup — worker reads this file
+curl -s "${PM_URL}/api/tables/${TABLE_ID}" -H "$AUTH" 2>/dev/null | python3 -c "
+import sys, json
+t = json.load(sys.stdin)
+json.dump({c['name']: c['column_id'] for c in t['columns']}, open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json', 'w'))
+" 2>/dev/null
 
 # Get column ID by name — queries PM directly, no cache
 col() {
