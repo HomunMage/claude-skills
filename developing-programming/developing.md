@@ -94,7 +94,8 @@ Auto-detect and run linters:
 ```bash
 git add -A
 git reset HEAD .tmp/ 2>/dev/null || true
-git commit -m "ticket-<row_number>: <short description>"
+git commit -m "<type>-<row_number>: <short description>"
+# Examples: task-42: add user auth, bug-7: fix login redirect, story-15: OAuth flow
 ```
 
 Use PM skill: `update_ticket <TICKET_KEY> review`

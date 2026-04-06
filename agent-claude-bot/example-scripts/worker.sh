@@ -140,7 +140,7 @@ RULES:
 - ONLY write application code. Do NOT run curl commands to any API or service.
 - Status updates are handled by the bash wrapper — never update ticket status yourself.
 - Focus ONLY on reading code and implementing the ticket.
-- Commit message: ticket-${ROW_NUMBER}: <short description>"
+- Commit message: <type>-${ROW_NUMBER}: <short description> (e.g. task-42: add feature)"
 
 # ─── Pipeline ────────────────────────────────────────────────────────────────
 
@@ -174,6 +174,10 @@ pm_set_status "review"
 while ! mkdir "$GIT_LOCK" 2>/dev/null; do sleep 2; done
 
 TICKET_TITLE=$(echo "$TASK_DESC" | sed 's/ (row_number=.*//' | head -c 72)
+TYPE_COL=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json')).get('Type',''))" 2>/dev/null || echo "")
+TICKET_TYPE=$(curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?limit=500&sort=asc" \
+  -H "Authorization: Bearer claude" | \
+  python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_number']==${ROW_NUMBER}),None); print(r['row_data'].get('${TYPE_COL}','task') if r else 'task')" 2>/dev/null || echo "task")
 
 git add -A 2>/dev/null || true
 git reset HEAD .tmp/ 2>/dev/null || true
@@ -182,9 +186,9 @@ if git diff --cached --quiet; then
   log "No changes to commit"
   pm_append_doc "No changes needed"
 else
-  git commit -m "ticket-${ROW_NUMBER}: ${TICKET_TITLE}"
-  log "Committed ticket-${ROW_NUMBER}"
-  pm_append_doc "Committed ticket-${ROW_NUMBER}"
+  git commit -m "${TICKET_TYPE}-${ROW_NUMBER}: ${TICKET_TITLE}"
+  log "Committed ${TICKET_TYPE}-${ROW_NUMBER}"
+  pm_append_doc "Committed ${TICKET_TYPE}-${ROW_NUMBER}"
 fi
 
 rmdir "$GIT_LOCK" 2>/dev/null || true
