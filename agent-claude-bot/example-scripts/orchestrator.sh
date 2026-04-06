@@ -4,6 +4,7 @@
 # PSEUDO CODE:
 #   startup:
 #     - cache column IDs to _col_cache.json (worker reads this)
+#     - recover orphans: if in_progress tickets exist but no tmux worker windows → reset to todo
 #   loop (max_cycles):
 #     1. query PM for todo tasks (type=task/bug, status=todo) using filter_json
 #     2. if none → ALL DONE, exit
@@ -43,6 +44,49 @@ import sys, json
 t = json.load(sys.stdin)
 json.dump({c['name']: c['column_id'] for c in t['columns']}, open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json', 'w'))
 " 2>/dev/null
+
+# ─── Recovery: reset orphaned in_progress tickets ─────────────────────────────
+# If tmux has no worker window for a ticket → it's orphaned (bot crashed) → reset to todo
+# Human in_progress tickets are safe — humans don't use tmux windows named w{N}
+recover_orphans() {
+  local SID; SID=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json')).get('Status',''))" 2>/dev/null)
+  [ -z "$SID" ] && return
+
+  # Get all in_progress tickets
+  local FILTER; FILTER=$(python3 -c "import urllib.parse; print(urllib.parse.quote('{\"${SID}\":\"in_progress\"}'))")
+  local ORPHANS
+  ORPHANS=$(curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?limit=100&filter_json=${FILTER}" -H "$AUTH" 2>/dev/null | python3 -c "
+import sys, json
+rows = json.load(sys.stdin)
+for r in rows:
+    print(r['row_number'])
+" 2>/dev/null)
+
+  [ -z "$ORPHANS" ] && return
+
+  # Check each: does a tmux worker window exist for it?
+  local ACTIVE_WINDOWS
+  ACTIVE_WINDOWS=$(tmux list-windows -t "${SESSION}" -F '#{window_name}' 2>/dev/null || echo "")
+
+  for rn in $ORPHANS; do
+    # Worker windows are named w1, w2, etc. — can't match exact ticket.
+    # But on fresh startup, there are ZERO worker windows → all in_progress are orphaned.
+    if ! echo "$ACTIVE_WINDOWS" | grep -q "^w"; then
+      # No worker windows at all → this ticket is orphaned
+      local cur
+      cur=$(curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" | \
+        python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_number']==${rn}),None); print(json.dumps(r['row_data']) if r else '{}')" 2>/dev/null)
+      local upd
+      upd=$(echo "$cur" | python3 -c "import sys,json; d=json.load(sys.stdin); d['${SID}']='todo'; print(json.dumps(d))")
+      curl -s -X PUT "${PM_URL}/api/tables/${TABLE_ID}/rows/${rn}" \
+        -H "$AUTH" -H "Content-Type: application/json" \
+        -d "{\"row_data\": ${upd}}" > /dev/null
+      log "Recovery: rn=${rn} in_progress → todo (no worker window)"
+    fi
+  done
+}
+
+recover_orphans
 
 # Get column ID by name — queries PM directly, no cache
 col() {
