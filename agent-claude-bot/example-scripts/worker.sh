@@ -103,7 +103,8 @@ $(head -200 "${PROJECT_DIR}/${f}")
 "
 done
 
-for skill in developing-programming/developing.md developing-project-management/SKILL.md; do
+# Only load programming skill — NOT project-management (PM API docs cause LLM to create junk rows)
+for skill in developing-programming/developing.md; do
   sf="$(find "${PROJECT_DIR}/.claude/skills" -path "*/${skill}" 2>/dev/null | head -1)"
   [ -n "$sf" ] && CONTEXT="${CONTEXT}
 --- Skill: $(basename $(dirname "$sf")) ---
@@ -127,8 +128,6 @@ if [ -n "$ROW_NUMBER" ] && [ -n "$TABLE_ID" ]; then
 fi
 
 SHARED="You are Worker ${WORKER_ID}. Dir: ${PROJECT_DIR}
-PM: ${PM_URL}/api  Table: ${TABLE_ID}  Auth: Bearer claude
-Row Number: ${ROW_NUMBER}
 
 ${CONTEXT}
 
@@ -138,12 +137,9 @@ ${TICKET_DOC}
 TASK: ${TASK_DESC}
 
 RULES:
-- Status updates and doc logging are handled by bash — DO NOT write curl for status/doc updates
-- Focus ONLY on reading code and implementing the ticket
-- All PKs: workspace_id, table_id, row_number, user_id, column_id
-- Row data field: row_data
-- Backend: flat imports, SQLModel, async
-- Frontend: Svelte 5 runes, Tailwind CSS 4, column_id not id
+- ONLY write application code. Do NOT run curl commands to any API or service.
+- Status updates are handled by the bash wrapper — never update ticket status yourself.
+- Focus ONLY on reading code and implementing the ticket.
 - Commit message: ticket-${ROW_NUMBER}: <short description>"
 
 # ─── Pipeline ────────────────────────────────────────────────────────────────
