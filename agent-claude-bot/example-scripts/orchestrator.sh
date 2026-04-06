@@ -19,48 +19,37 @@ log() {
   echo "$(date '+%H:%M:%S') [ORCH] $1" | tee -a "$LOG_FILE"
 }
 
-# ─── Task Planning ───────────────────────────────────────────────────────────
-# Reads project status files, asks Haiku to assign N tasks (one per worker)
+# ─── Task Planning (pure bash+python, NO LLM) ────────────────────────────────
+# NEVER use haiku/LLM here — it hallucinates ALL_DONE
 plan_tasks() {
-  local CONTEXT_FILES=""
+  local COLS_JSON
+  COLS_JSON=$(cat "${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json" 2>/dev/null || echo '{}')
+  local SID
+  SID=$(echo "$COLS_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('Status',''))" 2>/dev/null)
+  local FILTER
+  FILTER=$(python3 -c "import urllib.parse; print(urllib.parse.quote('{\"${SID}\":\"todo\"}'))" 2>/dev/null)
 
-  # Build context from available files
-  for f in "CLAUDE.md" "README.md"; do
-    if [ -f "${PROJECT_DIR}/${f}" ]; then
-      CONTEXT_FILES="${CONTEXT_FILES}
---- ${f} ---
-$(cat "${PROJECT_DIR}/${f}")
-"
-    fi
-  done
+  curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?offset=0&limit=100&filter_json=${FILTER}" -H "$AUTH" 2>/dev/null | python3 -c "
+import sys, json
+rows = json.load(sys.stdin)
+cols = json.loads(open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json').read())
+kid=cols.get('Key',''); tid=cols.get('Title',''); tyid=cols.get('Type',''); pid=cols.get('Parent','')
+NUM_WORKERS = ${NUM_WORKERS}
 
-  CLAUDECODE= claude -p \
-    --dangerously-skip-permissions \
-    --model haiku \
-    "You are the task planner for an autonomous dev team.
-Project dir: ${PROJECT_DIR}
+todo = [r for r in rows if r['row_data'].get(tyid) in ('task','bug')]
+todo.sort(key=lambda x: x['row_number'])
 
-Here are the project files:
-${CONTEXT_FILES}
-
-There are ${NUM_WORKERS} workers available.
-
-YOUR JOB:
-1. Query LatticeCast PM (http://localhost:13491) for todo tickets in this repo's PM table
-   curl -s http://localhost:13491/api/tables -H 'Authorization: Bearer claude' to find the table
-   curl -s http://localhost:13491/api/tables/{table_id}/rows to get tickets
-2. Assign ONE todo ticket to each worker
-3. Ensure workers won't conflict (different files/features)
-4. If fewer todo tickets than workers, assign IDLE to extra workers
-
-OUTPUT FORMAT (only output this, nothing else):
-TASK1: <ticket key + description for worker 1, or IDLE>
-TASK2: <ticket key + description for worker 2, or IDLE>
-...up to TASK${NUM_WORKERS}
-
-If ALL tickets are done (no todo status), output only:
-ALL_DONE
-" 2>/dev/null | grep -E '^(TASK[0-9]+:|ALL_DONE)' > "${PROJECT_DIR}/_task_queue"
+if not todo:
+    print('ALL_DONE')
+else:
+    for i in range(NUM_WORKERS):
+        if i < len(todo):
+            r = todo[i]
+            d = r['row_data']
+            print(f'TASK{i+1}: {d.get(kid,\"?\")} {d.get(tid,\"(untitled)\")} (row_number={r[\"row_number\"]} parent={d.get(pid,\"\")})')
+        else:
+            print(f'TASK{i+1}: IDLE')
+" > "${PROJECT_DIR}/_task_queue" 2>/dev/null
 }
 
 # ─── Spawn Worker ────────────────────────────────────────────────────────────
