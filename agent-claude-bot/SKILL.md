@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.17.4
+version: 0.18.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -210,7 +210,7 @@ The [example-scripts/](example-scripts/) directory contains **reference implemen
 
 ```
 tmux session: "<project-folder-name>"
- ├── window 0: orchestrator.sh (Haiku — queries PM, assigns tasks)
+ ├── window 0: orchestrator.sh (pure bash+python — queries PM, assigns tasks. NO LLM.)
  ├── window 1: worker.sh #1   (Sonnet — picks ticket, codes, tests, commits)
  ├── window 2: worker.sh #2   (Sonnet — picks ticket, codes, tests, commits)
  └── ...N workers
@@ -218,8 +218,10 @@ tmux session: "<project-folder-name>"
 
 ### Orchestrator Cycle (50 rounds max)
 
+**CRITICAL: Orchestrator uses pure bash+python for ticket querying. NEVER use haiku/LLM to query PM — it hallucinates ALL_DONE.**
+
 ```
-1. Plan: query LatticeCast PM for todo tickets → assign to workers
+1. Query: curl PM API + python filter (status=todo, type=task/bug) — NO LLM
 2. Spawn: launch N workers in tmux windows
 3. Monitor: poll _trigger_{id} files → kill workers if >900s
 4. Collect: read DONE/BLOCKED results
