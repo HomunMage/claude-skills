@@ -1,6 +1,20 @@
 #!/bin/bash
-# orchestrator.sh — Main loop: plan → spawn workers → monitor → collect → repeat
-# Usage: bash orchestrator.sh <project_dir> [max_cycles] [num_workers]
+# orchestrator.sh — pure rule-based, NO LLM
+#
+# PSEUDO CODE:
+#   loop (max_cycles):
+#     1. query PM for todo tasks (type=task/bug, status=todo)
+#     2. if none → ALL DONE, exit
+#     3. spawn N workers in tmux windows
+#     4. wait_finish: poll PM every 10s until ALL spawned rows
+#        leave (todo, in_progress, testing) → become (done, debugging, review, merged)
+#        - "todo" means worker hasn't picked it up yet — KEEP WAITING
+#        - "in_progress" means worker is coding — KEEP WAITING
+#        - "testing" means worker is testing — KEEP WAITING
+#        - anything else means worker is done — STOP WAITING
+#        timeout after 900s → kill worker windows
+#     5. kill worker tmux windows (cleanup)
+#     6. sleep 3 → next cycle
 
 set -uo pipefail
 
@@ -8,165 +22,131 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="${1:?Usage: orchestrator.sh <project_dir> [max_cycles] [num_workers]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 MAX_CYCLES="${2:-50}"
-NUM_WORKERS="${3:-2}"
+NUM_WORKERS="${3:-1}"
 SESSION="$(basename "$PROJECT_DIR")"
 LOG_FILE="${PROJECT_DIR}/.tmp/out/orchestrator.log"
 CYCLE=0
 
+PM_URL="http://localhost:13491"
+TABLE_ID="${TABLE_ID:?Set TABLE_ID}"
+AUTH="Authorization: Bearer claude"
+
 mkdir -p "${PROJECT_DIR}/.tmp/out"
 
-log() {
-  echo "$(date '+%H:%M:%S') [ORCH] $1" | tee -a "$LOG_FILE"
+log() { echo "$(date '+%H:%M:%S') [ORCH] $1" | tee -a "$LOG_FILE"; }
+
+# Get column ID by name — queries PM directly, no cache
+col() {
+  curl -s "${PM_URL}/api/tables/${TABLE_ID}" -H "$AUTH" 2>/dev/null | \
+  python3 -c "import sys,json; t=json.load(sys.stdin); print(next((c['column_id'] for c in t['columns'] if c['name']=='$1'),''))" 2>/dev/null
 }
 
-# ─── Task Planning (pure bash+python, NO LLM) ────────────────────────────────
-# NEVER use haiku/LLM here — it hallucinates ALL_DONE
-plan_tasks() {
-  local COLS_JSON
-  COLS_JSON=$(cat "${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json" 2>/dev/null || echo '{}')
-  local SID
-  SID=$(echo "$COLS_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('Status',''))" 2>/dev/null)
-  local FILTER
-  FILTER=$(python3 -c "import urllib.parse; print(urllib.parse.quote('{\"${SID}\":\"todo\"}'))" 2>/dev/null)
-
-  curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?offset=0&limit=100&filter_json=${FILTER}" -H "$AUTH" 2>/dev/null | python3 -c "
+# ─── Step 1: Query PM for todo tasks (pure bash+python, NO LLM) ──────────────
+get_todo() {
+  local SID; SID=$(col Status)
+  local FILTER; FILTER=$(python3 -c "import urllib.parse; print(urllib.parse.quote('{\"${SID}\":\"todo\"}'))")
+  curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?limit=100&filter_json=${FILTER}" -H "$AUTH" 2>/dev/null | python3 -c "
 import sys, json
 rows = json.load(sys.stdin)
-cols = json.loads(open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json').read())
-kid=cols.get('Key',''); tid=cols.get('Title',''); tyid=cols.get('Type',''); pid=cols.get('Parent','')
-NUM_WORKERS = ${NUM_WORKERS}
-
-todo = [r for r in rows if r['row_data'].get(tyid) in ('task','bug')]
+tyid = '$(col Type)'; tid = '$(col Title)'; pid = '$(col Parent)'
+todo = [r for r in rows if r['row_data'].get(tyid) in ('task', 'bug')]
 todo.sort(key=lambda x: x['row_number'])
-
 if not todo:
     print('ALL_DONE')
 else:
-    for i in range(NUM_WORKERS):
+    for i in range(${NUM_WORKERS}):
         if i < len(todo):
-            r = todo[i]
-            d = r['row_data']
-            print(f'TASK{i+1}: {d.get(kid,\"?\")} {d.get(tid,\"(untitled)\")} (row_number={r[\"row_number\"]} parent={d.get(pid,\"\")})')
+            r = todo[i]; d = r['row_data']
+            print(f'TASK{i+1}: {d.get(tid,\"?\")} (row_number={r[\"row_number\"]} parent={d.get(pid,\"\")})')
         else:
             print(f'TASK{i+1}: IDLE')
 " 2>/dev/null
 }
 
-# ─── Spawn Worker ────────────────────────────────────────────────────────────
+# ─── Step 3: Spawn worker in tmux window ──────────────────────────────────────
 spawn_worker() {
-  local WORKER_ID=$1
-  local TASK="$2"
-  local WINDOW_NAME="worker-${WORKER_ID}"
-
-  log "Spawning worker ${WORKER_ID}: ${TASK}"
-
-  
-
-  tmux new-window -t "${SESSION}" -n "${WINDOW_NAME}" \
-    "bash ${SCRIPT_DIR}/worker.sh '${PROJECT_DIR}' ${WORKER_ID} '${TASK}'"
+  local WID=$1 TASK="$2"
+  log "Spawn W${WID}: ${TASK}"
+  tmux new-window -t "${SESSION}" -n "w${WID}" \
+    "bash ${SCRIPT_DIR}/worker.sh '${PROJECT_DIR}' ${WID} '${TASK}'"
 }
 
-# ─── Wait for Workers (poll PM status, no trigger files) ─────────────────────
-# Workers set PM status to done/debugging when finished. Poll PM to detect.
-wait_for_workers() {
-  local ACTIVE_ROW_NUMBERS="$1"
-  local TIMEOUT=900
-  local ELAPSED=0
+# ─── Step 4: Wait for ALL workers to FINISH ───────────────────────────────────
+# "Finish" = PM status is NOT in (todo, in_progress, testing)
+# i.e. status became: done, debugging, review, merged
+# IMPORTANT: "todo" means worker hasn't started yet — must keep waiting!
+wait_finish() {
+  local ROW_NUMBERS="$1"
+  local TIMEOUT=900 ELAPSED=0
+  local SID; SID=$(col Status)
+
+  log "Waiting for rows [${ROW_NUMBERS}] to finish (timeout ${TIMEOUT}s)..."
 
   while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
-    # Check if all active tickets are no longer in_progress
-    local ALL_DONE
-    ALL_DONE=$(curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" 2>/dev/null | python3 -c "
+    sleep 10; ELAPSED=$((ELAPSED + 10))
+
+    local STILL_WORKING
+    STILL_WORKING=$(curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" 2>/dev/null | python3 -c "
 import sys, json
 rows = json.load(sys.stdin)
-cols = json.loads(open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json').read())
-sid = cols.get('Status','')
-active = '${ACTIVE_ROW_NUMBERS}'.split()
-all_done = True
+active = '${ROW_NUMBERS}'.split()
+working = []
 for rn in active:
     r = next((r for r in rows if str(r['row_number']) == rn), None)
-    if r and r['row_data'].get(sid) == 'in_progress':
-        all_done = False
-        break
-print('yes' if all_done else 'no')
+    if r:
+        s = r['row_data'].get('${SID}', '')
+        if s in ('todo', 'in_progress', 'testing'):
+            working.append(rn)
+print(' '.join(working) if working else 'NONE')
 " 2>/dev/null)
 
-    if [ "$ALL_DONE" = "yes" ]; then
+    if [ "$STILL_WORKING" = "NONE" ]; then
       log "All workers finished."
       return 0
     fi
 
-    sleep 10
-    ELAPSED=$((ELAPSED + 10))
-    [ $((ELAPSED % 60)) -eq 0 ] && log "Waiting... (${ELAPSED}s)"
+    [ $((ELAPSED % 60)) -eq 0 ] && log "Still working: [${STILL_WORKING}] (${ELAPSED}s)"
   done
 
-  log "TIMEOUT (${TIMEOUT}s): Killing remaining workers"
-  for rn in $ACTIVE_ROW_NUMBERS; do
-    tmux kill-window -t "${SESSION}:worker-*" 2>/dev/null || true
-  done
+  log "TIMEOUT after ${TIMEOUT}s — killing worker windows"
+  return 1
 }
 
-# ─── Main Loop ───────────────────────────────────────────────────────────────
-
-log "========================================="
-log "${SESSION} orchestrator started"
-log "Project:    ${PROJECT_DIR}"
-log "Max cycles: ${MAX_CYCLES}"
-log "Workers:    ${NUM_WORKERS}"
-log "========================================="
+# ─── Main loop ────────────────────────────────────────────────────────────────
+log "=== Orchestrator started (table: ${TABLE_ID}) ==="
 
 while [ "$CYCLE" -lt "$MAX_CYCLES" ]; do
   CYCLE=$((CYCLE + 1))
-  log ""
   log "=== Cycle ${CYCLE}/${MAX_CYCLES} ==="
-
-  # Clean stale git lock
   rmdir "${PROJECT_DIR}/_git.lock" 2>/dev/null || true
 
-  # Plan tasks (output to variable, no file)
-  log "Planning tasks..."
-  TASK_OUTPUT=$(plan_tasks)
+  # Step 1: Get tasks
+  TASKS=$(get_todo)
+  echo "$TASKS" | grep -q "ALL_DONE" && { log "ALL DONE!"; exit 0; }
 
-  if echo "$TASK_OUTPUT" | grep -q "ALL_DONE"; then
-    log "ALL TICKETS COMPLETE! Exiting."
-    exit 0
-  fi
-
-  # Parse and spawn workers
-  ACTIVE_WORKERS=""
+  # Step 2+3: Spawn workers
+  ACTIVE="" RNS=""
   for i in $(seq 1 "$NUM_WORKERS"); do
-    TASK=$(echo "$TASK_OUTPUT" | grep "^TASK${i}:" | sed "s/^TASK${i}: //")
-
-    if [ -n "$TASK" ] && [ "$TASK" != "IDLE" ]; then
-      spawn_worker "$i" "$TASK"
-      ACTIVE_WORKERS="${ACTIVE_WORKERS} ${i}"
+    T=$(echo "$TASKS" | grep "^TASK${i}:" | sed "s/^TASK${i}: //")
+    if [ -n "$T" ] && [ "$T" != "IDLE" ]; then
+      RN=$(echo "$T" | grep -oP 'row_number=\K[0-9]+' || echo "")
+      spawn_worker "$i" "$T"
+      ACTIVE="${ACTIVE} ${i}"; RNS="${RNS} ${RN}"
     else
-      log "Worker ${i}: IDLE (no task assigned)"
+      log "W${i}: IDLE"
     fi
   done
 
-  if [ -z "$ACTIVE_WORKERS" ]; then
-    log "All workers IDLE. Retrying in 15s..."
-    sleep 15
-    continue
-  fi
+  [ -z "$ACTIVE" ] && { sleep 15; continue; }
 
-  # Wait and monitor
-  log "Active workers:${ACTIVE_WORKERS}. Waiting (timeout: 900s)..."
-  wait_for_workers "$ACTIVE_WORKERS"
+  # Step 4: Wait for ALL workers to finish
+  wait_finish "$RNS"
 
-  # Collect results
-  collect_results "$ACTIVE_WORKERS"
-  RESULT=$?
+  # Step 5: Cleanup worker windows
+  for i in $ACTIVE; do
+    tmux kill-window -t "${SESSION}:w${i}" 2>/dev/null || true
+  done
 
-  case $RESULT in
-    0) log "Cycle ${CYCLE} complete. All workers succeeded." ;;
-    1) log "Some workers blocked/timed out. Continuing..." ; sleep 10 ;;
-    2) log "ALL TICKETS COMPLETE! Exiting." ; exit 0 ;;
-  esac
-
-  sleep 5
+  sleep 3
 done
-
-log "Max cycles (${MAX_CYCLES}) reached. Stopping."
+log "Max cycles reached."
