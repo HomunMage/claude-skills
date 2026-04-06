@@ -64,7 +64,7 @@ step() {
 }
 
 # If any step fails, signal BLOCKED and exit
-trap 'log "Pipeline failed. Writing BLOCKED."; echo "BLOCKED" > "$TRIGGER_FILE"; exit 1' ERR
+trap 'log "Pipeline failed. Writing BLOCKED."; pm_set_status "debugging"; pm_append_doc "W${WORKER_ID} BLOCKED — pipeline failed"; git stash 2>/dev/null; echo "BLOCKED" > "$TRIGGER_FILE"; exit 1' ERR
 
 log "Worker ${WORKER_ID} starting..."
 [ -n "$TASK_DESC" ] && log "Task: ${TASK_DESC}"
@@ -82,6 +82,12 @@ fi
 # ─── Phase 2: Extract row_number from task desc ─────────────────────────────
 ROW_NUMBER=$(echo "$TASK_DESC" | grep -oP 'row_number=\K[0-9]+' || echo "")
 PARENT_RN=$(echo "$TASK_DESC" | grep -oP 'parent=\K[0-9]+' || echo "")
+
+if [ -z "$ROW_NUMBER" ]; then
+  log "ERROR: No row_number in task desc"
+  echo "BLOCKED" > "$TRIGGER_FILE"
+  exit 1
+fi
 
 # ─── Phase 3: Set in_progress IMMEDIATELY (bash, not LLM) ──────────────────
 pm_set_status "in_progress"
@@ -166,20 +172,30 @@ Do NOT commit yet."
 
 pm_append_doc "Tests completed"
 
-# Step 3: Commit
-step "commit" "${SHARED}
-
-1. while ! mkdir ${GIT_LOCK} 2>/dev/null; do sleep 2; done
-2. git add specific files (NOT .tmp/)
-3. git commit -m 'ticket-${ROW_NUMBER}: <short description>'
-4. rmdir ${GIT_LOCK}"
-
+# Step 3: Commit + merge (bash, not LLM)
 pm_set_status "review"
-pm_append_doc "Committed"
 
-# Step 4: Mark merged
-pm_set_status "merged"
-pm_append_doc "Completed by W${WORKER_ID}"
+while ! mkdir "$GIT_LOCK" 2>/dev/null; do sleep 2; done
+
+TICKET_TITLE=$(echo "$TASK_DESC" | sed 's/ (row_number=.*//' | head -c 72)
+
+git add -A 2>/dev/null || true
+git reset HEAD .tmp/ 2>/dev/null || true
+
+if git diff --cached --quiet; then
+  log "No changes to commit"
+  pm_append_doc "No changes needed"
+else
+  git commit -m "ticket-${ROW_NUMBER}: ${TICKET_TITLE}"
+  log "Committed ticket-${ROW_NUMBER}"
+  pm_append_doc "Committed ticket-${ROW_NUMBER}"
+fi
+
+rmdir "$GIT_LOCK" 2>/dev/null || true
+
+# Step 4: Mark done
+pm_set_status "done"
+pm_append_doc "W${WORKER_ID} finished"
 
 # ─── Signal done ─────────────────────────────────────────────────────────────
 echo "DONE" > "$TRIGGER_FILE"
