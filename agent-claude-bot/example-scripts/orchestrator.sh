@@ -68,7 +68,7 @@ spawn_worker() {
   local WID=$1 TASK="$2"
   log "Spawn W${WID}: ${TASK}"
   tmux new-window -t "${SESSION}" -n "w${WID}" \
-    "bash ${SCRIPT_DIR}/worker.sh '${PROJECT_DIR}' ${WID} '${TASK}'"
+    "TABLE_ID='${TABLE_ID}' bash ${SCRIPT_DIR}/worker.sh '${PROJECT_DIR}' ${WID} '${TASK}'"
 }
 
 # ─── Step 4: Wait for ALL workers to FINISH ───────────────────────────────────
