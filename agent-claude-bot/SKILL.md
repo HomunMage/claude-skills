@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.24.0
+version: 0.25.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -177,109 +177,26 @@ Worker sets PM status to `done`. Orchestrator polls PM to detect completion — 
 - **NEVER POST new rows to update status.** Always use `PUT /api/tables/{table_id}/rows/{row_number}` to update existing row_data. POST creates a NEW row with a new auto-generated Key — this causes duplicate rows (e.g. TO-* mirrors). Workers must ONLY update, never create.
 - **If stuck:** diagnose why, append error + analysis to ticket doc, try different approach. If can't finish in time: commit partial work, log what's done and what's left in doc, set status to `review`, signal DONE. Next worker picks up from where you left off by reading the doc.
 
-## Usage
+## 3 Phases
 
-Start the bot:
-```bash
-bash .tmp/claude-bot/start.sh
-```
+| Phase | Doc | What |
+|-------|-----|------|
+| **Plan** | [plan/plan.md](plan/plan.md) | Discuss design → create tickets in LatticeCast PM |
+| **Prepare** | [prepare.md](prepare.md) | Copy scripts to `.tmp/claude-bot/`, set TABLE_ID, copy `pm_tools.sh` |
+| **Run** | [running.md](running.md) | `bash run.sh`, `tmux attach`, `stop.sh`, recovery |
 
-Monitor:
-```bash
-tmux attach -t <project-folder-name>
-```
+## Key Dependencies
 
-Stop:
-```bash
-bash .tmp/claude-bot/stop.sh
-```
-
-## Planning Phase
-
-Before running the bot, use the planning phase to discuss and design tickets with the user.
-See [plan/plan.md](plan/plan.md) for the full planning workflow.
+- `Skill(developing-project-management)` — provides `pm_tools.sh` (shared bash helpers)
+- `Skill(developing-programming)` — test/format/lint workflow
+- LatticeCast PM — ticket tracking, doc storage (MinIO)
 
 ## Example Scripts
 
-The [example-scripts/](example-scripts/) directory contains **reference implementations**.
+[example-scripts/](example-scripts/) — reference implementations:
 
-| Example | Pattern |
-|---------|---------|
-| [start.sh](example-scripts/start.sh) | tmux session setup |
-| [stop.sh](example-scripts/stop.sh) | Cleanup trigger/lock files |
-| [orchestrator.sh](example-scripts/orchestrator.sh) | Plan → spawn → monitor(900s) → collect loop |
-| [worker.sh](example-scripts/worker.sh) | Worktree → implement → `Skill(developing-programming)` → merge |
-| [checkpoint.sh](example-scripts/checkpoint.sh) | Git commit with lock |
-
-## Architecture
-
-```
-tmux session: "<project-folder-name>"
- ├── window 0: orchestrator
- ├── window 1: w1-task-182    ← worker #1 on task row 182
- ├── window 2: w2-bug-45      ← worker #2 on bug row 45
- └── ...N workers
-```
-
-Window names: `w{N}-{type}-{row_number}` — shows what each worker is doing.
-
-### Startup
-
-1. Cache column IDs to `_col_cache.json`
-2. **Recovery**: check `in_progress` tickets. If no tmux window `*-{rn}` exists → orphaned → reset to `todo`
-
-### Orchestrator Cycle (50 rounds max)
-
-**CRITICAL: Pure bash+python. NEVER use LLM to query PM.**
-
-```
-1. Query: curl PM API + python filter (status=todo, type=task/bug)
-2. Spawn: launch N workers in tmux windows (name: w{N}-{type}-{rn})
-3. Wait: poll PM every 10s until status leaves (todo,in_progress,testing)
-4. Cleanup: kill worker windows
-5. Sleep 3 → next cycle
-```
-
-### Worker Cycle (one ticket per round)
-
-```
-1. Lookup: find parent story branch from issue's Parent field in PM
-2. Branch: git worktree add .tmp/worker_{id} -b issue/{slug} story/{story-slug}
-3. Query: LatticeCast PM for assigned todo issue
-4. Work: implement the ticket, update PM status throughout
-5. Skill(developing-programming): test → format → lint → commit
-6. Merge: merge issue branch into story branch, remove worktree, PM → merged
-7. Check: if all sibling issues merged → merge story into main, PM story → merged
-8. Done: PM status set to done (orchestrator detects via poll)
-```
-
-## Coordination
-
-| Mechanism | How | Why |
-|-----------|-----|-----|
-| **Git Worktree** | `git worktree add .tmp/worker_{id}` | Isolated branch per worker |
-| **Git Lock** | `mkdir _git.lock` (atomic) | Only one worker merges at a time |
-| **PM Status Poll** | Orchestrator polls PM for `done`/`debugging` | Workers signal via PM status |
-| **LatticeCast PM** | HTTP API for ticket status | Single source of truth for tickets |
-| **Timeout** | 900s (15 min) | Kill stuck workers |
-
-## File Conventions
-
-| File | Purpose |
-|------|---------|
-| `README.md` | Project overview |
-| `.tmp/llm*.md` | Design docs, references (planning phase output) |
-| `.tmp/claude-bot/*.sh` | Runner scripts |
-| `.tmp/out/*.log` | Worker/orchestrator logs |
-
-**Note:** `.tmp/llm.plan.status` is NOT used. All ticket tracking is in LatticeCast PM. After planning creates tickets in PM, delete `.tmp/llm.plan.status` if it exists.
-
-## Logs
-
-```
-<project_dir>/.tmp/out/
-├── orchestrator.log
-├── worker_1.log
-├── worker_2.log
-└── ...
-```
+| Script | Role |
+|--------|------|
+| orchestrator.sh | Pure rule-based: query PM → spawn → poll → cleanup |
+| worker.sh | Bash infra + LLM code: `source pm_tools.sh` for PM ops |
+| start.sh / stop.sh | tmux session lifecycle |
