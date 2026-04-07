@@ -181,7 +181,7 @@ Worker sets PM status to `done`. Orchestrator polls PM to detect completion — 
 
 | Phase | Doc | What |
 |-------|-----|------|
-| **Plan** | [plan/plan.md](plan/plan.md) | Discuss design → create tickets in LatticeCast PM |
+| **Plan** | [plan.md](plan.md) | Discuss design → create tickets in LatticeCast PM |
 | **Prepare** | [prepare.md](prepare.md) | Copy scripts to `.tmp/claude-bot/`, set TABLE_ID, copy `pm_tools.sh` |
 | **Run** | [running.md](running.md) | `bash run.sh`, `tmux attach`, `stop.sh`, recovery |
 
