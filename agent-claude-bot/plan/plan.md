@@ -80,6 +80,12 @@ Rules:
 - Stories are **never** directly implementable — they are groupings only
 - Issues are the only tickets assigned to workers
 
+### Title vs Doc Rule
+- **Title is SHORT** — one line summary, max 80 chars. Example: `Add OAuth middleware`
+- **Doc has ALL the detail** — implementation instructions, files to change, decisions, acceptance criteria
+- Title is what you see in table view. Doc is what the worker reads before coding.
+- **Every ticket MUST have a non-empty doc.** Empty doc = planning failure.
+
 ### Ticket Size Rules
 - Each issue must be **completable in <15 minutes** by a Claude Sonnet worker
 - Each issue must be **independently testable** — tests must pass after each issue

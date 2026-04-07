@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.23.0
+version: 0.24.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -86,11 +86,15 @@ cd .tmp/worker_{id}
 
 Each worker operates in its own worktree — no conflicts.
 
-### Step 3: Pick Ticket → IMMEDIATELY update to `in_progress`
+### Step 3: Pick Ticket → update status → READ DOC FIRST
 - Query LatticeCast PM for `todo` issues (type=task or type=bug)
-- **Update PM status → `in_progress` FIRST** via `PUT /api/tables/{table_id}/rows/{row_number}`
-- **Append to doc** via `PUT /api/tables/{table_id}/rows/{row_number}/doc`: `- {timestamp} Picked up by W{id}`
-- **Read the issue's doc** — the doc contains implementation instructions from planning
+- **Update PM status → `in_progress` FIRST**
+- **READ THE DOC FIRST** via `GET /api/tables/{table_id}/rows/{row_number}/doc`
+  - The doc has ALL implementation detail — what to do, which files, decisions, acceptance criteria
+  - Title is just a short summary — **doc is the real spec**
+  - If a previous worker attempted this ticket, the doc has their work log + what's left
+  - **Follow the doc instructions, not just the title**
+- Append to doc: `- {timestamp} Picked up by W{id}`
 - Work on ONLY that ticket
 
 **IMPORTANT: API uses `row_number` (integer) in URL, NOT `row_id` (UUID).**
