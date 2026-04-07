@@ -38,6 +38,12 @@ pm_set_status() {
   log "Status → ${new_status} (row ${ROW_NUMBER})"
 }
 
+pm_read_doc() {
+  [ -z "$ROW_NUMBER" ] || [ -z "$TABLE_ID" ] && return
+  curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows/${ROW_NUMBER}/doc" \
+    -H "Authorization: Bearer claude" 2>/dev/null || echo ""
+}
+
 pm_append_doc() {
   local msg="$1"
   [ -z "$ROW_NUMBER" ] || [ -z "$TABLE_ID" ] && return
@@ -120,12 +126,9 @@ $(head -200 "$f")
 "
 done
 
-# Read ticket doc for implementation instructions
-TICKET_DOC=""
-if [ -n "$ROW_NUMBER" ] && [ -n "$TABLE_ID" ]; then
-  TICKET_DOC=$(curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows/${ROW_NUMBER}/doc" \
-    -H "Authorization: Bearer claude" 2>/dev/null || echo "")
-fi
+# Read ticket doc FIRST — doc has all implementation detail, title is just a summary
+TICKET_DOC=$(pm_read_doc)
+log "Doc length: ${#TICKET_DOC} chars"
 
 SHARED="You are Worker ${WORKER_ID}. Dir: ${PROJECT_DIR}
 
