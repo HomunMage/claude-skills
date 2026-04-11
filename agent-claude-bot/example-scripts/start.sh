@@ -14,7 +14,7 @@ NUM_WORKERS="${3:-2}"
 SESSION="$(basename "$PROJECT_DIR")"
 
 # Validate LatticeCast PM is running
-if ! curl -s http://localhost:13491/api/status 2>/dev/null | grep -q '"ok"'; then
+if ! curl -s http://localhost:13491/api/v1/status 2>/dev/null | grep -q '"ok"'; then
   echo "ERROR: LatticeCast PM is not running."
   echo "Start it: cd <LatticeCast-repo> && docker compose up -d backend frontend"
   echo "Or clone: git clone https://github.com/LatticeMage/LatticeCast.git"

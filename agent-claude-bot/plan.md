@@ -138,7 +138,7 @@ After user approves, use `Skill(developing-project-management)`:
 3. Create the **epic first**, note its `row_id`
 4. Create each **story** with `Parent=<epic_row_id>`, note each story's `row_id`
 5. Create each **issue** with `Parent=<story_row_id>` — never parent directly to epic
-6. **Write design content to ticket docs in MinIO** via `PUT /api/tables/{table_id}/rows/{row_id}/doc`:
+6. **Write design content to ticket docs in MinIO** via `PUT /api/v1/tables/{table_id}/rows/{row_id}/doc`:
 
    **Epic doc** — full design overview, architecture decisions, scope:
    ```markdown

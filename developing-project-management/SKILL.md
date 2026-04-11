@@ -3,7 +3,7 @@ name: developing-project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal lib used by developing-programming, agent-claude-bot, developing-onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.4.0
+version: 0.5.0
 ---
 
 # LatticeCast Project Management
@@ -35,19 +35,19 @@ curl -H "Authorization: Bearer user@example.com"   # email
 Rows use **row_number** (integer, auto-increment per table), NOT row_id (UUID).
 
 ```
-PUT /api/tables/{table_id}/rows/{row_number}
-GET /api/tables/{table_id}/rows/{row_number}/doc
+PUT /api/v1/tables/{table_id}/rows/{row_number}
+GET /api/v1/tables/{table_id}/rows/{row_number}/doc
 ```
 
 Use `filter_json` to query by JSONB field without pagination issues:
 ```bash
-curl "/api/tables/{id}/rows?filter_json={\"<status_col>\":\"todo\"}&limit=50"
+curl "/api/v1/tables/{id}/rows?filter_json={\"<status_col>\":\"todo\"}&limit=50"
 ```
 
 ## Ensure Running
 
 ```bash
-curl -s http://localhost:13491/api/status 2>/dev/null | grep -q '"ok"'
+curl -s http://localhost:13491/api/v1/status 2>/dev/null | grep -q '"ok"'
 ```
 
 If not running → tell user to `docker compose up -d`. **Do NOT fallback to file-based tracking.**
@@ -56,11 +56,11 @@ If not running → tell user to `docker compose up -d`. **Do NOT fallback to fil
 
 See [setup.md](setup.md). Summary:
 
-1. `GET /api/login/me` -H "Bearer claude" (create bot user)
-2. `POST /api/workspaces` (create workspace)
+1. `GET /api/v1/login/me` -H "Bearer claude" (create bot user)
+2. `POST /api/v1/workspaces` (create workspace)
 3. Ask user for team member IDs
-4. `POST /api/workspaces/{id}/members` with `{"user_name": "<display_id>", "role": "member"}`
-5. `POST /api/tables/template/pm` (create PM table)
+4. `POST /api/v1/workspaces/{id}/members` with `{"user_name": "<display_id>", "role": "member"}`
+5. `POST /api/v1/tables/template/pm` (create PM table)
 6. Report board URL
 
 ## Add Member
@@ -68,7 +68,7 @@ See [setup.md](setup.md). Summary:
 Provide ONE of `user_id` (UUID), `user_name` (display_id), `user_email`:
 
 ```bash
-curl -X POST "/api/workspaces/{workspace_id}/members" \
+curl -X POST "/api/v1/workspaces/{workspace_id}/members" \
   -H "Authorization: Bearer claude" \
   -d '{"user_name": "lattice", "role": "member"}'
 ```
@@ -77,10 +77,10 @@ curl -X POST "/api/workspaces/{workspace_id}/members" \
 
 ```bash
 # All rows (default: newest first)
-curl "/api/tables/{table_id}/rows?limit=100" -H "Authorization: Bearer claude"
+curl "/api/v1/tables/{table_id}/rows?limit=100" -H "Authorization: Bearer claude"
 
 # Filter by status (server-side JSONB containment)
-curl "/api/tables/{table_id}/rows?filter_json={\"<status_col>\":\"todo\"}&limit=50"
+curl "/api/v1/tables/{table_id}/rows?filter_json={\"<status_col>\":\"todo\"}&limit=50"
 ```
 
 ## Update Ticket Status
@@ -91,12 +91,12 @@ Statuses: `todo` → `in_progress` → `testing` → `review` → `merged` (also
 
 ```bash
 # CORRECT: PUT updates existing row
-curl -X PUT "/api/tables/{table_id}/rows/{row_number}" \
+curl -X PUT "/api/v1/tables/{table_id}/rows/{row_number}" \
   -H "Authorization: Bearer claude" \
   -d '{"row_data": {...existing_data, "<status_col_id>": "in_progress"}}'
 
 # WRONG: POST creates a NEW row — causes duplicate TO-* keys!
-# curl -X POST "/api/tables/{table_id}/rows" ...  ← NEVER DO THIS FOR STATUS UPDATES
+# curl -X POST "/api/v1/tables/{table_id}/rows" ...  ← NEVER DO THIS FOR STATUS UPDATES
 ```
 
 ## Default Time Rule
@@ -106,8 +106,8 @@ When creating a ticket, if `Start Date` or `Due Date` not specified, **default b
 ## Ticket Docs (MinIO)
 
 ```bash
-GET  /api/tables/{table_id}/rows/{row_number}/doc   # read markdown
-PUT  /api/tables/{table_id}/rows/{row_number}/doc   # save markdown (text/plain or multipart file)
+GET  /api/v1/tables/{table_id}/rows/{row_number}/doc   # read markdown
+PUT  /api/v1/tables/{table_id}/rows/{row_number}/doc   # save markdown (text/plain or multipart file)
 ```
 
 ### Recommended workflow: use `.tmp/issue/` as local scratch
@@ -115,14 +115,14 @@ PUT  /api/tables/{table_id}/rows/{row_number}/doc   # save markdown (text/plain 
 ```bash
 # 1. Download doc to local file
 mkdir -p .tmp/issue/{row_number}
-curl -s "/api/tables/{table_id}/rows/{row_number}/doc" \
+curl -s "/api/v1/tables/{table_id}/rows/{row_number}/doc" \
   -H "Authorization: Bearer claude" > .tmp/issue/{row_number}/doc.md
 
 # 2. Edit locally (append, rewrite, whatever)
 echo "- $(date -u +%Y-%m-%dT%H:%M:%SZ) Started by W1" >> .tmp/issue/{row_number}/doc.md
 
 # 3. Upload back
-curl -X PUT "/api/tables/{table_id}/rows/{row_number}/doc" \
+curl -X PUT "/api/v1/tables/{table_id}/rows/{row_number}/doc" \
   -H "Authorization: Bearer claude" \
   -F file=@.tmp/issue/{row_number}/doc.md
 ```

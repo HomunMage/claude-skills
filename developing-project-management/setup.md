@@ -14,7 +14,7 @@ Only needed once per project. After setup, use the main skill for daily operatio
 
 ### 1. Ensure running
 ```bash
-curl -s http://localhost:13491/api/status 2>/dev/null | grep -q '"ok"'
+curl -s http://localhost:13491/api/v1/status 2>/dev/null | grep -q '"ok"'
 ```
 
 If not running, tell user:
@@ -25,13 +25,13 @@ If not running, tell user:
 
 ### 2. Create bot user
 ```bash
-curl -s http://localhost:13491/api/login/me -H "Authorization: Bearer claude"
+curl -s http://localhost:13491/api/v1/login/me -H "Authorization: Bearer claude"
 ```
 
 ### 3. Create workspace
 ```bash
 PROJECT_NAME="$(basename $(git rev-parse --show-toplevel 2>/dev/null || pwd))"
-curl -s -X POST http://localhost:13491/api/workspaces \
+curl -s -X POST http://localhost:13491/api/v1/workspaces \
   -H "Authorization: Bearer claude" \
   -H "Content-Type: application/json" \
   -d "{\"name\": \"${PROJECT_NAME}\"}"
@@ -45,9 +45,9 @@ Ask: **"Which user IDs should have access? (e.g. homunmage@gmail.com)"**
 ```bash
 WORKSPACE_ID="claude/${PROJECT_NAME}"
 # Ensure member user exists first (auto-created in dev mode)
-curl -s http://localhost:13491/api/login/me -H "Authorization: Bearer <user_id>"
+curl -s http://localhost:13491/api/v1/login/me -H "Authorization: Bearer <user_id>"
 # Add to workspace
-curl -s -X POST "http://localhost:13491/api/workspaces/${WORKSPACE_ID}/members" \
+curl -s -X POST "http://localhost:13491/api/v1/workspaces/${WORKSPACE_ID}/members" \
   -H "Authorization: Bearer claude" \
   -H "Content-Type: application/json" \
   -d '{"user_name": "<display_id>", "role": "member"}'
@@ -55,7 +55,7 @@ curl -s -X POST "http://localhost:13491/api/workspaces/${WORKSPACE_ID}/members" 
 
 ### 6. Create PM table
 ```bash
-curl -s -X POST http://localhost:13491/api/tables/template/pm \
+curl -s -X POST http://localhost:13491/api/v1/tables/template/pm \
   -H "Authorization: Bearer claude" \
   -H "Content-Type: application/json" \
   -d "{\"name\": \"${PROJECT_NAME}\", \"workspace_id\": \"claude/${PROJECT_NAME}\"}"

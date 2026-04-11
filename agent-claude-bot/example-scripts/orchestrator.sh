@@ -39,7 +39,7 @@ mkdir -p "${PROJECT_DIR}/.tmp/out"
 log() { echo "$(date '+%H:%M:%S') [ORCH] $1" | tee -a "$LOG_FILE"; }
 
 # Cache column IDs at startup — worker reads this file
-curl -s "${PM_URL}/api/tables/${TABLE_ID}" -H "$AUTH" 2>/dev/null | python3 -c "
+curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}" -H "$AUTH" 2>/dev/null | python3 -c "
 import sys, json
 t = json.load(sys.stdin)
 json.dump({c['name']: c['column_id'] for c in t['columns']}, open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json', 'w'))
@@ -55,7 +55,7 @@ recover_orphans() {
   # Get all in_progress tickets
   local FILTER; FILTER=$(python3 -c "import urllib.parse; print(urllib.parse.quote('{\"${SID}\":\"in_progress\"}'))")
   local ORPHANS
-  ORPHANS=$(curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?limit=100&filter_json=${FILTER}" -H "$AUTH" 2>/dev/null | python3 -c "
+  ORPHANS=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=100&filter_json=${FILTER}" -H "$AUTH" 2>/dev/null | python3 -c "
 import sys, json
 rows = json.load(sys.stdin)
 for r in rows:
@@ -74,11 +74,11 @@ for r in rows:
     if ! echo "$ACTIVE_WINDOWS" | grep -q "\-${rn}$"; then
       # No worker windows at all → this ticket is orphaned
       local cur
-      cur=$(curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" | \
+      cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" | \
         python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_number']==${rn}),None); print(json.dumps(r['row_data']) if r else '{}')" 2>/dev/null)
       local upd
       upd=$(echo "$cur" | python3 -c "import sys,json; d=json.load(sys.stdin); d['${SID}']='todo'; print(json.dumps(d))")
-      curl -s -X PUT "${PM_URL}/api/tables/${TABLE_ID}/rows/${rn}" \
+      curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" \
         -H "$AUTH" -H "Content-Type: application/json" \
         -d "{\"row_data\": ${upd}}" > /dev/null
       log "Recovery: rn=${rn} in_progress → todo (no worker window)"
@@ -90,7 +90,7 @@ recover_orphans
 
 # Get column ID by name — queries PM directly, no cache
 col() {
-  curl -s "${PM_URL}/api/tables/${TABLE_ID}" -H "$AUTH" 2>/dev/null | \
+  curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}" -H "$AUTH" 2>/dev/null | \
   python3 -c "import sys,json; t=json.load(sys.stdin); print(next((c['column_id'] for c in t['columns'] if c['name']=='$1'),''))" 2>/dev/null
 }
 
@@ -98,7 +98,7 @@ col() {
 get_todo() {
   local SID; SID=$(col Status)
   local FILTER; FILTER=$(python3 -c "import urllib.parse; print(urllib.parse.quote('{\"${SID}\":\"todo\"}'))")
-  curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?limit=100&filter_json=${FILTER}" -H "$AUTH" 2>/dev/null | python3 -c "
+  curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=100&filter_json=${FILTER}" -H "$AUTH" 2>/dev/null | python3 -c "
 import sys, json
 rows = json.load(sys.stdin)
 tyid = '$(col Type)'; tid = '$(col Title)'; pid = '$(col Parent)'
@@ -143,7 +143,7 @@ wait_finish() {
     sleep 10; ELAPSED=$((ELAPSED + 10))
 
     local STILL_WORKING
-    STILL_WORKING=$(curl -s "${PM_URL}/api/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" 2>/dev/null | python3 -c "
+    STILL_WORKING=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" 2>/dev/null | python3 -c "
 import sys, json
 rows = json.load(sys.stdin)
 active = '${ROW_NUMBERS}'.split()

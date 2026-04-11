@@ -68,7 +68,7 @@ When writing scripts, tailor these to the specific project:
 
 ## Checklist before running
 
-- [ ] LatticeCast PM running (`curl localhost:13491/api/status`)
+- [ ] LatticeCast PM running (`curl localhost:13491/api/v1/status`)
 - [ ] TABLE_ID set in `run.sh`
 - [ ] All 6 scripts written and `chmod +x`
 - [ ] `_col_cache.json` will be auto-created by orchestrator at startup
