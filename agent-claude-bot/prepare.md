@@ -2,43 +2,57 @@
 
 After planning creates tickets in LatticeCast PM, prepare the runner scripts before starting workers.
 
-## Step 1: Create `.tmp/claude-bot/` directory
+**IMPORTANT: Do NOT `cp` from example-scripts/. Write each script file from scratch**, referencing `example-scripts/` as a pattern guide. Each project may need different context, skills, test commands, or worker pipeline steps.
+
+## Step 1: Create directories
 
 ```bash
 mkdir -p .tmp/claude-bot .tmp/out
 ```
 
-## Step 2: Copy scripts from skills examples
+## Step 2: Write each script
 
-```bash
-cp .claude/skills/agent-claude-bot/example-scripts/start.sh .tmp/claude-bot/
-cp .claude/skills/agent-claude-bot/example-scripts/stop.sh .tmp/claude-bot/
-cp .claude/skills/agent-claude-bot/example-scripts/orchestrator.sh .tmp/claude-bot/
-cp .claude/skills/agent-claude-bot/example-scripts/worker.sh .tmp/claude-bot/
-chmod +x .tmp/claude-bot/*.sh
-```
+Read the example scripts in `.claude/skills/agent-claude-bot/example-scripts/` to understand the patterns, then **write customized versions** for this project:
 
-## Step 3: Copy pm_tools.sh from PM skill
+### 2a. `run.sh` — project-specific wrapper
+- Set `TABLE_ID` for this project's PM table
+- Call `start.sh` with project dir, max cycles, num workers
 
-```bash
-cp .claude/skills/developing-project-management/pm_tools.sh .tmp/claude-bot/
-```
+### 2b. `start.sh` — tmux session setup
+- Validate PM is running
+- Kill existing session
+- Start orchestrator in tmux window 0
 
-Worker and orchestrator `source` this file for all PM operations (status, doc, create ticket).
+### 2c. `stop.sh` — kill session
+- Kill tmux session, clean up lock files
 
-## Step 4: Create `run.sh` wrapper
+### 2d. `orchestrator.sh` — pure rule-based task dispatch (NO LLM)
+- Cache column IDs at startup (`_col_cache.json`)
+- Recover orphaned in_progress tickets
+- Loop: query todo → spawn workers → poll PM until done → cleanup
 
-Set `TABLE_ID` for this project's PM table:
+### 2e. `worker.sh` — bash infra + LLM code
+- Extract row_number from task description
+- Set status to `in_progress` immediately (bash, not LLM)
+- Build context from CLAUDE.md, README.md, skills, ticket doc
+- Pipeline: implement → test → commit → done
+- PM status updates via bash helpers (never LLM)
 
-```bash
-cat > .tmp/claude-bot/run.sh << 'EOF'
-#!/bin/bash
-SD="$(cd "$(dirname "$0")" && pwd)"; PD="$(cd "$SD/../.." && pwd)"
-export TABLE_ID="<paste_table_id_here>"
-exec bash "$SD/start.sh" "$PD" "${1:-50}" "${2:-1}"
-EOF
-chmod +x .tmp/claude-bot/run.sh
-```
+### 2f. `pm_tools.sh` — shared PM helpers
+- Write from `.claude/skills/developing-project-management/pm_tools.sh` as reference
+- Functions: `pm_cache_cols`, `pm_col`, `pm_set_status`, `pm_read_doc`, `pm_append_doc`, `pm_create_ticket`
+
+## Customization points per project
+
+When writing scripts, tailor these to the specific project:
+
+| What | Customize |
+|------|-----------|
+| **Context files** | Which files to load (CLAUDE.md, README.md, .tmp/llm*.md) |
+| **Skills loaded** | Which `Skill(developing-*)` to include in worker prompt |
+| **Test commands** | FE: svelte-check, build. BE: pytest, ast.parse. Or project-specific |
+| **Num workers** | 1 for simple tasks, 2-3 for parallel stories |
+| **Worker prompt** | Task-specific rules, file restrictions, coding patterns |
 
 ## File layout after prepare
 
@@ -49,12 +63,12 @@ chmod +x .tmp/claude-bot/run.sh
 ├── stop.sh             ← kill session
 ├── orchestrator.sh     ← pure rule-based task dispatch
 ├── worker.sh           ← bash infra + LLM code
-└── pm_tools.sh         ← shared PM helpers (from developing-project-management)
+└── pm_tools.sh         ← shared PM helpers
 ```
 
 ## Checklist before running
 
 - [ ] LatticeCast PM running (`curl localhost:13491/api/status`)
 - [ ] TABLE_ID set in `run.sh`
-- [ ] `pm_tools.sh` copied
+- [ ] All 6 scripts written and `chmod +x`
 - [ ] `_col_cache.json` will be auto-created by orchestrator at startup
