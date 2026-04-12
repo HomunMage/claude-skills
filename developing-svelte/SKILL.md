@@ -1,7 +1,7 @@
 ---
 name: developing-svelte
 description: Svelte/SvelteKit development — enforce pure TS logic in src/lib/, .svelte files handle UI/UX only. Use when writing Svelte components or SvelteKit routes.
-version: 0.3.0
+version: 0.4.0
 ---
 
 # Svelte Architecture: Logic/UI Separation
@@ -113,6 +113,37 @@ Rules:
 - Compare before/after if refactoring styling
 - Include snapshot path in commit message or ticket doc
 - If the snapshot looks wrong, fix before committing
+
+## Theme: Use `$lib/UI/theme.svelte.ts` — Single Source of Truth
+
+**All dark/light mode styling MUST go through the theme manager.**
+
+```
+src/lib/UI/theme.svelte.ts  → isDark, theme.light, theme.dark tokens
+```
+
+Rules:
+- **`isDark.value`** is the single reactive dark-mode flag. Derives from `settingsStore.darkMode`.
+- **`theme.light` / `theme.dark`** hold Tailwind class tokens for all common styles (bg, text, border, etc.)
+- **Components use `T` shorthand**: `const T = isDark.value ? theme.dark : theme.light;` then `class="{T.cardBg} {T.body}"`
+- **NEVER derive dark mode independently.** Don't read `localStorage('theme')`, `prefers-color-scheme`, or create local dark flags. Always import `isDark` from `$lib/UI/theme.svelte.ts`.
+- **NEVER use inline ternaries for dark/light classes.** Instead of `{isDark.value ? 'bg-gray-800 text-gray-200' : 'bg-white text-gray-800'}`, use `{T.cardBg} {T.body}`.
+- **New tokens?** Add them to `ThemeTokens` interface and both `theme.light` / `theme.dark` objects.
+- **Tag colors** use `TAG_COLORS` / `getTagColor()` from the same file.
+
+```svelte
+<!-- BAD: inline dark mode ternary -->
+<div class="{isDark.value ? 'bg-gray-800 text-gray-200' : 'bg-white text-gray-800'}">
+
+<!-- GOOD: theme tokens -->
+<script>
+  import { isDark, theme } from '$lib/UI/theme.svelte';
+  const T = $derived(isDark.value ? theme.dark : theme.light);
+</script>
+<div class="{T.cardBg} {T.body}">
+```
+
+**Why:** Scattered `isDark.value ? ... : ...` ternaries make dark mode untestable from Playwright (can't toggle via localStorage). The theme manager is the single source — Playwright sets `settingsStore` once, everything follows.
 
 ## $lib Alias
 
