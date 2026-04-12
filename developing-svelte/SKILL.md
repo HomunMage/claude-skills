@@ -123,27 +123,29 @@ src/lib/UI/theme.svelte.ts  → isDark, theme.light, theme.dark tokens
 ```
 
 Rules:
-- **`isDark.value`** is the single reactive dark-mode flag. Derives from `settingsStore.darkMode`.
-- **`theme.light` / `theme.dark`** hold Tailwind class tokens for all common styles (bg, text, border, etc.)
-- **Components use `T` shorthand**: `const T = isDark.value ? theme.dark : theme.light;` then `class="{T.cardBg} {T.body}"`
-- **NEVER derive dark mode independently.** Don't read `localStorage('theme')`, `prefers-color-scheme`, or create local dark flags. Always import `isDark` from `$lib/UI/theme.svelte.ts`.
-- **NEVER use inline ternaries for dark/light classes.** Instead of `{isDark.value ? 'bg-gray-800 text-gray-200' : 'bg-white text-gray-800'}`, use `{T.cardBg} {T.body}`.
-- **New tokens?** Add them to `ThemeTokens` interface and both `theme.light` / `theme.dark` objects.
+- **`theme.svelte.ts` exports `T`** — a reactive derived object that auto-switches between `theme.light` and `theme.dark` based on `isDark`. Components never derive it themselves.
+- **Components just `import { T } from '$lib/UI/theme.svelte'`** and use `{T.cardBg}`, `{T.body}` etc. No ternaries, no isDark checks.
+- **NEVER derive dark mode in components.** No `isDark.value ? ... : ...` ternaries for styling. No `const T = $derived(...)` in components. The theme manager handles it.
+- **NEVER read `localStorage('theme')`, `prefers-color-scheme`, or create local dark flags.**
+- **New tokens?** Add them to `ThemeTokens` interface and both `theme.light` / `theme.dark` objects in `theme.svelte.ts`.
 - **Tag colors** use `TAG_COLORS` / `getTagColor()` from the same file.
 
 ```svelte
-<!-- BAD: inline dark mode ternary -->
-<div class="{isDark.value ? 'bg-gray-800 text-gray-200' : 'bg-white text-gray-800'}">
-
-<!-- GOOD: theme tokens -->
+<!-- BAD: component derives dark mode -->
 <script>
   import { isDark, theme } from '$lib/UI/theme.svelte';
   const T = $derived(isDark.value ? theme.dark : theme.light);
 </script>
+<div class="{isDark.value ? 'bg-gray-800' : 'bg-white'}">
+
+<!-- GOOD: theme.ts exports T, component just uses it -->
+<script>
+  import { T } from '$lib/UI/theme.svelte';
+</script>
 <div class="{T.cardBg} {T.body}">
 ```
 
-**Why:** Scattered `isDark.value ? ... : ...` ternaries make dark mode untestable from Playwright (can't toggle via localStorage). The theme manager is the single source — Playwright sets `settingsStore` once, everything follows.
+**Why:** Derivation in one place means Playwright can toggle dark mode by setting `settingsStore.darkMode` once — all components follow automatically. No scattered ternaries to miss.
 
 ## $lib Alias
 
