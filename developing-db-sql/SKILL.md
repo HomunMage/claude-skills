@@ -2,7 +2,7 @@
 name: developing-db-sql
 description: SQL writing — INSERT, UPSERT, indexing, JSONB. Use when writing or reviewing SQL statements, migrations, or schema changes.
 user-invocable: false
-version: 0.3.0
+version: 0.4.0
 ---
 
 # Safe SQL Rules
@@ -103,6 +103,19 @@ command: >
   -c log_connections=on
   -c log_disconnections=on
 ```
+
+## Idempotent SQL: Always use IF EXISTS / IF NOT EXISTS
+
+All SQL must be safe to run multiple times. See [safe_example.sql](safe_example.sql) for complete patterns.
+
+Key patterns:
+- `CREATE TABLE IF NOT EXISTS` / `DROP TABLE IF EXISTS`
+- `CREATE SCHEMA IF NOT EXISTS` / `DROP SCHEMA IF EXISTS`
+- `CREATE INDEX IF NOT EXISTS` / `DROP INDEX IF EXISTS`
+- Roles/Users/Columns have no `IF NOT EXISTS` — wrap in `DO $$ BEGIN IF NOT EXISTS (SELECT ...) THEN ... END IF; END $$;`
+- Triggers: `DROP TRIGGER IF EXISTS` then `CREATE TRIGGER`
+- Functions: `CREATE OR REPLACE FUNCTION`
+- GRANTs are naturally idempotent (re-granting is a no-op)
 
 ## Migrations: NEVER modify existing files
 
