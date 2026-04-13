@@ -2,10 +2,107 @@
 name: developing-db-sql
 description: SQL writing — INSERT, UPSERT, indexing, JSONB. Use when writing or reviewing SQL statements, migrations, or schema changes.
 user-invocable: false
-version: 0.2.0
+version: 0.3.0
 ---
 
 # Safe SQL Rules
+
+## PG Roles & Schemas: Least Privilege
+
+### Principle: roles start with ZERO privileges — add incrementally
+
+A newly created role has NO access to anything. You must explicitly grant every capability.
+
+### Schema-based permission model
+
+```
+public   — user-facing data (tables, rows, workspaces, workspace_members)
+auth     — authentication (users, user_info)
+private  — internal system data (migrations, config)
+```
+
+### Roles
+
+| Role | Purpose | Schemas |
+|------|---------|---------|
+| `dba` | Migrations (DDL) | ALL schemas — CREATE/ALTER/DROP |
+| `app` | General API | public: CRUD, auth: SELECT only |
+| `login_mgr` | Login/auth | auth: SELECT/INSERT/UPDATE only |
+
+### Creating roles (step by step)
+
+```sql
+-- 1. Create role (NO privileges by default)
+CREATE ROLE app;
+
+-- 2. Grant USAGE on schema (required to see objects in it)
+GRANT USAGE ON SCHEMA public TO app;
+
+-- 3. Grant table-level privileges
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app;
+
+-- 4. Grant sequence usage (needed for SERIAL/BIGSERIAL columns)
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app;
+
+-- 5. Set DEFAULT privileges (for tables created in the future by dba)
+ALTER DEFAULT PRIVILEGES FOR ROLE dba IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app;
+ALTER DEFAULT PRIVILEGES FOR ROLE dba IN SCHEMA public
+  GRANT USAGE ON SEQUENCES TO app;
+
+-- 6. Create login user inheriting role
+CREATE USER app_user WITH PASSWORD 'secret' IN ROLE app;
+```
+
+### Key rules
+
+- **`GRANT USAGE ON SCHEMA`** — required first, otherwise role can't even see the schema
+- **`GRANT ... ON ALL TABLES`** — covers existing tables only
+- **`ALTER DEFAULT PRIVILEGES`** — covers future tables (must specify `FOR ROLE <owner>`)
+- **`FOR ROLE dba`** is critical — default privileges apply to objects created BY that role
+- **Never GRANT on `public` schema to `login_mgr`** — login should only touch auth tables
+- **Never GRANT DDL (CREATE/ALTER/DROP) to `app` or `login_mgr`**
+- **Test**: `psql -U app_user -c "DROP TABLE public.rows"` must fail
+
+### Cross-schema SELECT
+
+If `app` needs to read from `auth` schema (e.g. resolve user display names):
+
+```sql
+GRANT USAGE ON SCHEMA auth TO app;
+GRANT SELECT ON ALL TABLES IN SCHEMA auth TO app;
+ALTER DEFAULT PRIVILEGES FOR ROLE dba IN SCHEMA auth
+  GRANT SELECT ON TABLES TO app;
+```
+
+### search_path per connection
+
+Set `search_path` when creating the SQLAlchemy engine so models resolve unqualified table names correctly:
+
+```python
+# app engine: sees public + auth (read-only)
+engine = create_async_engine(url, connect_args={"server_settings": {"search_path": "public,auth"}})
+
+# login engine: sees auth only  
+engine = create_async_engine(url, connect_args={"server_settings": {"search_path": "auth"}})
+
+# dba engine: sees everything
+engine = create_async_engine(url, connect_args={"server_settings": {"search_path": "public,auth,private"}})
+```
+
+### PG logging (docker-compose)
+
+Enable native logging for debugging permission issues:
+
+```yaml
+command: >
+  postgres
+  -c logging_collector=on
+  -c log_directory=/var/log/postgresql
+  -c log_statement=all
+  -c log_connections=on
+  -c log_disconnections=on
+```
 
 ## Migrations: NEVER modify existing files
 
