@@ -56,13 +56,15 @@ CREATE USER app_user WITH PASSWORD 'secret' IN ROLE app;
 
 ### Key rules
 
+- **Only DBA can modify tables** — CREATE TABLE, ALTER TABLE, DROP TABLE are DDL operations. Only `dba` role has these privileges. Migration SQL runner MUST use DBA connection.
+- **`app` and `login_mgr` are DML-only** — SELECT/INSERT/UPDATE/DELETE. They cannot create, alter, or drop any database object.
 - **`GRANT USAGE ON SCHEMA`** — required first, otherwise role can't even see the schema
 - **`GRANT ... ON ALL TABLES`** — covers existing tables only
 - **`ALTER DEFAULT PRIVILEGES`** — covers future tables (must specify `FOR ROLE <owner>`)
 - **`FOR ROLE dba`** is critical — default privileges apply to objects created BY that role
 - **Never GRANT on `public` schema to `login_mgr`** — login should only touch auth tables
-- **Never GRANT DDL (CREATE/ALTER/DROP) to `app` or `login_mgr`**
 - **Test**: `psql -U app_user -c "DROP TABLE public.rows"` must fail
+- **Test**: `psql -U app_user -c "ALTER TABLE public.rows ADD COLUMN x TEXT"` must fail
 
 ### Cross-schema SELECT
 
@@ -147,36 +149,6 @@ ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name;
 
 **Why:** Bare `ON CONFLICT` catches ANY unique constraint — if a second unique column conflicts unexpectedly, the row silently disappears. Debugging this is painful.
 
-## JSONB: Use GIN index, never btree
+## JSONB
 
-**NEVER** `CREATE INDEX ON t (jsonb_col)` — btree can't search inside JSONB.
-
-**ALWAYS** use GIN for JSONB columns.
-
-```sql
--- BAD: btree on jsonb — useless for key/value lookups
-CREATE INDEX idx_data ON events (metadata);
-
--- GOOD: GIN index — supports @>, ?, ?&, ?| operators
-CREATE INDEX idx_data ON events USING GIN (metadata);
-
--- GOOD: GIN on specific path (smaller, faster)
-CREATE INDEX idx_data ON events USING GIN ((metadata -> 'type'));
-```
-
-**Why:** btree indexes on JSONB only support equality on the entire JSON blob. GIN indexes support `@>` containment, `?` key-exists, and path queries — the operations you actually use.
-
-### Query patterns that use GIN
-
-```sql
--- containment: uses GIN
-SELECT * FROM events WHERE metadata @> '{"type": "click"}';
-
--- key exists: uses GIN
-SELECT * FROM events WHERE metadata ? 'type';
-
--- AVOID: this does NOT use GIN index
-SELECT * FROM events WHERE metadata->>'type' = 'click';
--- FIX: use containment instead
-SELECT * FROM events WHERE metadata @> '{"type": "click"}';
-```
+See [jsonb.md](jsonb.md) for GIN indexing, query patterns, and containment operators.
