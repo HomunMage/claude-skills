@@ -2,7 +2,7 @@
 name: developing-db-sql
 description: SQL writing — INSERT, UPSERT, indexing, JSONB. Use when writing or reviewing SQL statements, migrations, or schema changes.
 user-invocable: false
-version: 0.4.0
+version: 0.5.0
 ---
 
 # Safe SQL Rules
@@ -118,6 +118,23 @@ Key patterns:
 - Triggers: `DROP TRIGGER IF EXISTS` then `CREATE TRIGGER`
 - Functions: `CREATE OR REPLACE FUNCTION`
 - GRANTs are naturally idempotent (re-granting is a no-op)
+
+## Lint & Test: Migration Runner
+
+Before committing migration SQL, validate with the dockerized runner:
+
+```bash
+# Lint + test (no apply to real DB)
+docker compose --profile migration run --rm migration --test-only
+
+# Full flow: lint → test → apply
+docker compose --profile migration run --rm migration
+```
+
+- **SQLFluff** lints all `V*.sql` files with `--dialect postgres`
+- **No extra alignment spaces** — SQLFluff LT01 flags multi-space padding (e.g. `ON ALL TABLES    IN SCHEMA`). Use single spaces only.
+- **Test** spins up a temp PG container, applies all migrations, verifies schema + RLS
+- All lint warnings MUST be clean before committing
 
 ## Migrations: NEVER modify existing files
 

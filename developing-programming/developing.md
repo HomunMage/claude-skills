@@ -54,6 +54,16 @@ If the ticket has tag `test`, skip normal implementation. Instead:
 4. Use PM skill: `log_to_doc "Screenshots saved to .browser/"`
 5. Skip to Step 5 (commit)
 
+## Step 2.9: If touching SQL → load SQL skill
+
+If changes include `migration/*.sql` or backend SQL queries, load `Skill(developing-db-sql)` for safe SQL rules, then run:
+
+```bash
+docker compose --profile migration run --rm migration --test-only
+```
+
+All lint warnings MUST be clean before proceeding.
+
 ## Step 3: Test → status: `testing`
 
 Use PM skill: `update_ticket <TICKET_KEY> testing`
