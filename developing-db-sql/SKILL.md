@@ -2,7 +2,7 @@
 name: developing-db-sql
 description: SQL writing — INSERT, UPSERT, indexing, JSONB. Use when writing or reviewing SQL statements, migrations, or schema changes.
 user-invocable: false
-version: 0.5.0
+version: 0.6.1
 ---
 
 # Safe SQL Rules
@@ -124,17 +124,32 @@ Key patterns:
 Before committing migration SQL, validate with the dockerized runner:
 
 ```bash
-# Lint + test (no apply to real DB)
+# Full flow: lint → verify checksums → test → apply
+docker compose --profile migration run --rm migration
+
+# Lint + checksum + test (no apply to real DB)
 docker compose --profile migration run --rm migration --test-only
 
-# Full flow: lint → test → apply
-docker compose --profile migration run --rm migration
+# Skip lint/test, apply directly (CI / prod deploy)
+docker compose --profile migration run --rm migration --apply-only
+
+# Regenerate checksums.txt after editing any V*.sql — commit alongside
+docker compose --profile migration run --rm --entrypoint python migration migrate.py --hash
 ```
 
-- **SQLFluff** lints all `V*.sql` files with `--dialect postgres`
-- **No extra alignment spaces** — SQLFluff LT01 flags multi-space padding (e.g. `ON ALL TABLES    IN SCHEMA`). Use single spaces only.
-- **Test** spins up a temp PG container, applies all migrations, verifies schema + RLS
-- All lint warnings MUST be clean before committing
+- **SQLFluff** lints all `V*.sql` with `max_line_length=80`. Violations block the flow.
+
+- **Temp PG test** spins up a fresh container, applies all migrations, verifies schema + RLS.
+- **Checksum integrity** — committed `migration/checksums.txt` is SHA-256 of every V*.sql. Mismatch aborts before any DB touch.
+- **DB-side checksum** — `schema_migrations.checksum` tracks applied file hashes. Tampering with an already-applied migration aborts re-apply.
+
+### Editing workflow
+
+1. Add new `V<N>__name.sql` (never modify an existing one)
+2. `docker compose --profile migration run --rm migration --test-only` → make lint green
+3. `docker compose --profile migration run --rm --entrypoint python migration migrate.py --hash` → update `checksums.txt`
+4. Commit SQL file + `checksums.txt` together
+5. Deploy: `docker compose --profile migration run --rm migration` applies to real DB
 
 ## Migrations: NEVER modify existing files
 
