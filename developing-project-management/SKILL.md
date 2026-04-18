@@ -3,7 +3,7 @@ name: developing-project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal lib used by developing-programming, agent-claude-bot, developing-onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.5.0
+version: 0.6.0
 ---
 
 # LatticeCast Project Management
