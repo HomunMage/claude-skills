@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.27.0
+version: 0.28.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -59,12 +59,12 @@ main
 Before creating a worktree, look up the issue's parent story in LatticeCast PM:
 
 ```bash
-# Get the issue row to find parent story row_id
-ISSUE_ROW_ID="<row_id>"
+# Get the issue row to find parent story row_number
+ISSUE_ROW_NUMBER="<row_number>"
 TABLE_ID="<table_id>"
-# From row_data, get the Parent column value (= story row_id)
-# Then fetch that story row to get its Key (e.g. L-5)
-# Story branch name: story/{story-key-lowercase}  e.g. story/l-5
+# From row_data, get the Parent column value (= story row_number)
+# Then fetch that story row to get its type-<row_number> key (e.g. story-5)
+# Story branch name: story/{story-key-lowercase}  e.g. story/story-5
 STORY_BRANCH="story/<story-key-lowercase>"
 ```
 
@@ -147,7 +147,7 @@ Update PM status → `merged`
 After marking the issue merged, check sibling issues in PM:
 
 ```bash
-# Query all rows in table, filter by Parent = <story_row_id>
+# Query all rows in table, filter by Parent = <story_row_number>
 # If ALL sibling issues have status=merged:
 git checkout main
 git merge "$STORY_BRANCH"
