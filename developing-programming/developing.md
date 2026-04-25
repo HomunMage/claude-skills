@@ -85,19 +85,28 @@ All tests MUST pass before proceeding.
 
 Use PM skill: `log_to_doc "All tests passed"`
 
-## Step 4: Format & Lint
+## Step 4: Format & Lint — MUST pass before commit
 
-Auto-detect and run formatters:
-- JS/TS → `npx prettier --write .`
-- Rust → `cargo fmt`
-- Python → `ruff format .`
-- Go → `gofmt -w .`
+**Local host has no Node/Python/sqlfluff — always run lint inside the matching container** (mounts source from host so fixes land in-place).
 
-Auto-detect and run linters:
-- JS/TS → `npx eslint --fix .`
-- Rust → `cargo clippy -- -D warnings`
-- Python → `ruff check --fix .`
-- Go → `golangci-lint run`
+### Frontend (FE)
+```bash
+docker compose exec frontend npm run lint
+```
+
+### Backend (BE) — Python/FastAPI
+```bash
+docker compose exec backend uv run ruff format .
+docker compose exec backend uv run ruff check --fix .
+```
+
+### Database (PG) — SQL migrations
+```bash
+docker compose --profile migration run --rm migration --test-only
+```
+Runs sqlfluff + spins up temp PG to verify all migrations apply cleanly.
+
+**Rule**: if you edited a file, run that layer's lint. A failing lint = do not commit. If lint finds something it can't auto-fix, fix it manually — do NOT bypass with `--no-verify` or similar.
 
 ## Step 5: Commit → status: `review`
 
