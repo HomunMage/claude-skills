@@ -1,7 +1,7 @@
 ---
 name: developing-svelte
 description: Svelte/SvelteKit development — enforce pure TS logic in src/lib/, .svelte files handle UI/UX only. Use when writing Svelte components or SvelteKit routes.
-version: 0.4.0
+version: 0.5.0
 ---
 
 # Svelte Architecture: Logic/UI Separation
@@ -150,3 +150,14 @@ Rules:
 ## $lib Alias
 
 Always use `$lib/` imports in .svelte and route files — never relative paths to src/lib/.
+
+## Clean Lint — No Unused Vars
+
+**Before commit**, `docker compose exec frontend npm run lint` MUST pass. No exceptions.
+
+Common eslint violations to clean up:
+- **`no-unused-vars`** — remove dead imports, dead props, dead destructure targets. Don't mask with `_` prefix unless the var is deliberately ignored from a destructure where you need later fields (e.g. `const [_first, ...rest] = arr`).
+- **`svelte/no-at-html-tags`** — `{@html x}` is XSS-prone. Sanitize first (e.g. `DOMPurify.sanitize(marked(md))`) or avoid.
+- **a11y warnings** (click without keyboard, missing role) — add `role`, `tabindex`, or use `<button>`.
+
+**Never add `// eslint-disable`** to silence a real issue. Fix it. If a warning is genuinely a false positive, discuss before suppressing.
