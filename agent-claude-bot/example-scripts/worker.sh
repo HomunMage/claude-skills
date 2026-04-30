@@ -111,7 +111,9 @@ done
 
 # Only load programming skill — NOT project-management (PM API docs cause LLM to create junk rows)
 for skill in developing-programming/developing.md; do
-  sf="$(find "${PROJECT_DIR}/.claude/skills" -path "*/${skill}" 2>/dev/null | head -1)"
+  # NB: find | head -1 SIGPIPEs find when head closes the pipe → with `set -euo pipefail`
+  # + `trap ERR` the worker dies in clean phase before any code runs. Use -print -quit.
+  sf="$(find "${PROJECT_DIR}/.claude/skills" -path "*/${skill}" -print -quit 2>/dev/null || true)"
   [ -n "$sf" ] && CONTEXT="${CONTEXT}
 --- Skill: $(basename $(dirname "$sf")) ---
 $(cat "$sf")
@@ -176,7 +178,7 @@ pm_set_status "review"
 
 while ! mkdir "$GIT_LOCK" 2>/dev/null; do sleep 2; done
 
-TICKET_TITLE=$(echo "$TASK_DESC" | sed 's/ (row_number=.*//' | head -c 72)
+TICKET_TITLE=$(echo "$TASK_DESC" | sed 's/ (row_number=.*//' | cut -c1-72)
 TYPE_COL=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json')).get('Type',''))" 2>/dev/null || echo "")
 TICKET_TYPE=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" \
   -H "Authorization: Bearer claude" | \
