@@ -1,7 +1,7 @@
 ---
 name: developing-svelte
 description: Svelte/SvelteKit development — enforce pure TS logic in src/lib/, .svelte files handle UI/UX only. Use when writing Svelte components or SvelteKit routes.
-version: 0.5.0
+version: 0.6.0
 ---
 
 # Svelte Architecture: Logic/UI Separation
@@ -84,9 +84,18 @@ Rules:
 3. **Refactoring?** Extract any logic from `<script>` blocks into `src/lib/`
 4. **Testing?** Logic tests = pure TS (vitest). UI tests = Playwright snapshot (see below)
 
-## MUST: Verify with .browser Snapshot
+## MUST: Verify with .browser Snapshot — INSPECT IT, DON'T JUST SAVE IT
 
 **Every FE change MUST be verified with a Playwright screenshot before committing.** No exceptions. If you can't see it, it's not done.
+
+But "took a snapshot" is not the same as "verified the render is right." A
+saved PNG that you never opened proves nothing. The rule is:
+
+1. Take the snapshot.
+2. **OPEN it (Read tool on the .png) and visually inspect it.**
+3. Confirm the layout, content, and styling are correct.
+4. If anything looks off — clipped numbers, blocks crammed together,
+   missing labels, blank space, wrong colors — fix before committing.
 
 ```bash
 # Start browser
@@ -99,20 +108,66 @@ from playwright.sync_api import sync_playwright
 # ... set up page, inject auth ...
 page.goto('<your-page-url>')
 page.wait_for_timeout(3000)
-page.screenshot(path='/output/<feature_name>.png')
+page.screenshot(path='/output/<feature_name>.png', full_page=True)
 "
 
-# View result
+# View result — Read tool on the PNG, look at it
 ls .browser/<feature_name>.png
 ```
 
-**Why:** The typography bug (missing `@tailwindcss/typography`) shipped because nobody looked at the rendered output. A 3-second snapshot would have caught it instantly.
+**Why:** Typography bugs, broken grid layouts, and visual regressions
+ship when nobody looks at the rendered output. A saved snapshot that's
+never opened catches nothing. A 3-second look at the image catches the
+class of bugs the type checker can never see.
 
 Rules:
-- After **any** visual change (CSS, layout, component, view), take a snapshot
-- Compare before/after if refactoring styling
-- Include snapshot path in commit message or ticket doc
-- If the snapshot looks wrong, fix before committing
+- After **any** visual change (CSS, layout, component, view), take AND
+  inspect a snapshot.
+- For grid/layout work, snapshot at realistic content volumes (5+ rows,
+  4+ blocks). A single-block dashboard hides span/positioning bugs.
+- Compare before/after if refactoring styling.
+- Include snapshot path in commit message or ticket doc.
+- If the snapshot looks wrong, fix before committing.
+
+## Tailwind v4: Dynamic class names get purged
+
+Tailwind 4 only emits CSS for class names it can statically see in the
+source. Interpolated class names from runtime values are **NOT** generated
+and silently fall through to default styling. This is the #1 cause of
+"the layout looks broken but the code looks right" bugs.
+
+```svelte
+<!-- BAD: col-span-1, col-span-2, ... col-span-12 do NOT all exist -->
+<div class="col-span-{item.w} row-span-{item.h}">
+
+<!-- BAD: same problem with pad/text/bg/grid -->
+<div class="p-{spacing}">
+<div class="text-{size}">
+<div class="grid-cols-{cols}">
+```
+
+Three fixes, in order of preference:
+
+1. **Inline `style` for layout values that come from data** — most reliable.
+   ```svelte
+   <div style="grid-column: {item.x + 1} / span {item.w};
+               grid-row:    {item.y + 1} / span {item.h};">
+   ```
+
+2. **Pre-defined Tailwind class lookup** when the value range is small and known.
+   ```ts
+   const SPAN: Record<number, string> = {
+     1: 'col-span-1', 2: 'col-span-2', 3: 'col-span-3',
+     4: 'col-span-4', 6: 'col-span-6', 12: 'col-span-12',
+   };
+   ```
+
+3. **Tailwind safelist** in `tailwind.config` for the exact classes you
+   need at runtime. Heaviest hammer; use only when (1) and (2) won't fit.
+
+**Always pair this with a snapshot check.** If a layout-data-driven class
+is purged, the page renders but quietly collapses — you'll only catch it
+visually.
 
 ## Theme: Use `$lib/UI/theme.svelte.ts` — Single Source of Truth
 
