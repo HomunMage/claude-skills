@@ -4,6 +4,12 @@
 
 set -euo pipefail
 
+# shellcheck disable=SC1091
+# Self-source config.sh — workers spawn in tmux windows that may not inherit
+# env from the orchestrator (existing tmux server case).
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "${SCRIPT_DIR}/config.sh"
+
 PROJECT_DIR="${1:?Usage: worker.sh <project_dir> <worker_id> [task_description]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 WORKER_ID="${2:?Worker ID required}"
@@ -11,7 +17,7 @@ TASK_DESC="${3:-}"
 # No trigger files — orchestrator polls PM status instead
 LOG_FILE="${PROJECT_DIR}/.tmp/out/worker_${WORKER_ID}.log"
 GIT_LOCK="${PROJECT_DIR}/_git.lock"
-PM_URL="http://localhost:13491"
+PM_URL="${LC_API%/api/v1}"
 TABLE_ID="${TABLE_ID:-}"
 
 mkdir -p "${PROJECT_DIR}/.tmp/out"

@@ -22,6 +22,12 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck disable=SC1091
+# Sourcing config.sh here makes orchestrator.sh self-sufficient regardless of
+# whether it inherits env from start.sh. Critical when tmux new-session
+# attaches to an already-running tmux server whose env predates this run.
+source "${SCRIPT_DIR}/config.sh"
+
 PROJECT_DIR="${1:?Usage: orchestrator.sh <project_dir> [max_cycles] [num_workers]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 MAX_CYCLES="${2:-50}"
@@ -30,9 +36,9 @@ SESSION="$(basename "$PROJECT_DIR")"
 LOG_FILE="${PROJECT_DIR}/.tmp/out/orchestrator.log"
 CYCLE=0
 
-PM_URL="http://localhost:13491"
+PM_URL="${LC_API%/api/v1}"
 TABLE_ID="${TABLE_ID:?Set TABLE_ID}"
-AUTH="Authorization: Bearer claude"
+AUTH="${LC_AUTH_HEADER}"
 
 mkdir -p "${PROJECT_DIR}/.tmp/out"
 
