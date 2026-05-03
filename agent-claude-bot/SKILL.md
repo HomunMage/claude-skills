@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.28.1
+version: 0.29.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -182,14 +182,37 @@ Worker sets PM status to `done`. Orchestrator polls PM to detect completion — 
 | Phase | Doc | What |
 |-------|-----|------|
 | **Plan** | [plan.md](plan.md) | Discuss design → create tickets in LatticeCast PM |
-| **Prepare** | [prepare.md](prepare.md) | Copy scripts to `.tmp/claude-bot/`, set TABLE_ID, copy `pm_tools.sh` |
+| **Prepare** | [prepare.md](prepare.md) | Write project's `.tmp/claude-bot/config.sh` + scripts that source the skill |
 | **Run** | [running.md](running.md) | `bash run.sh`, `tmux attach`, `stop.sh`, recovery |
 
 ## Key Dependencies
 
-- `Skill(developing-project-management)` — provides `pm_tools.sh` (shared bash helpers)
-- `Skill(developing-programming)` — test/format/lint workflow
-- LatticeCast PM — ticket tracking, doc storage (MinIO)
+- `Skill(latticecast-bash)` — provides `lc_api.sh` (thin curl wrappers, generic).
+- `Skill(developing-project-management)` — provides `pm_tool.sh` (PM domain
+  helpers; auto-sources `lc_api.sh` from the sibling skill).
+- `Skill(developing-programming)` — test/format/lint workflow.
+- LatticeCast PM — ticket tracking, doc storage (MinIO).
+
+## Composition pattern
+
+Every project that uses the bot writes its own `.tmp/claude-bot/config.sh`
+and the bot's local scripts source it + the skill's `pm_tool.sh`:
+
+```bash
+# .tmp/claude-bot/config.sh — per-project values only
+export LC_API="http://localhost:13491/api/v1"
+export LC_AUTH_HEADER="Authorization: Bearer claude"
+export PM_USER="claude"
+export TABLE_ID="pm"
+export WORKSPACE_ID="<uuid>"
+export PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+export SKILLS_DIR="${PROJECT_DIR}/.claude/skills"
+
+# orchestrator.sh / worker.sh
+source "${SCRIPT_DIR}/config.sh"
+source "${SKILLS_DIR}/developing-project-management/pm_tool.sh"
+# pm_*, lc_* are now available
+```
 
 ## Example Scripts
 
@@ -198,5 +221,5 @@ Worker sets PM status to `done`. Orchestrator polls PM to detect completion — 
 | Script | Role |
 |--------|------|
 | orchestrator.sh | Pure rule-based: query PM → spawn → poll → cleanup |
-| worker.sh | Bash infra + LLM code: `source pm_tools.sh` for PM ops |
+| worker.sh | Bash infra + LLM code: `source pm_tool.sh` for PM ops |
 | start.sh / stop.sh | tmux session lifecycle |

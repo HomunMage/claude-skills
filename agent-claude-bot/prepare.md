@@ -38,9 +38,28 @@ Read the example scripts in `.claude/skills/agent-claude-bot/example-scripts/` t
 - Pipeline: implement → test → commit → done
 - PM status updates via bash helpers (never LLM)
 
-### 2f. `pm_tools.sh` — shared PM helpers
-- Write from `.claude/skills/developing-project-management/pm_tools.sh` as reference
-- Functions: `pm_cache_cols`, `pm_col`, `pm_set_status`, `pm_read_doc`, `pm_append_doc`, `pm_create_ticket`
+### 2f. `config.sh` — per-project values
+
+```bash
+export LC_API="http://localhost:13491/api/v1"
+export LC_AUTH_HEADER="Authorization: Bearer claude"
+export PM_USER="claude"
+export TABLE_ID="pm"
+export WORKSPACE_ID="<uuid>"
+_THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PROJECT_DIR="$(cd "${_THIS_DIR}/../.." && pwd)"
+export SKILLS_DIR="${PROJECT_DIR}/.claude/skills"
+```
+
+That's it. The helpers (`pm_*`, `lc_*`) are sourced from the skill,
+not duplicated per project:
+
+```bash
+# at the top of orchestrator.sh / worker.sh:
+source "${SCRIPT_DIR}/config.sh"
+source "${SKILLS_DIR}/developing-project-management/pm_tool.sh"
+# pm_tool.sh auto-sources lc_api.sh from latticecast-bash
+```
 
 ## Customization points per project
 
@@ -58,13 +77,16 @@ When writing scripts, tailor these to the specific project:
 
 ```
 .tmp/claude-bot/
-├── run.sh              ← project-specific wrapper (TABLE_ID)
+├── config.sh           ← per-project: LC_API, WORKSPACE_ID, TABLE_ID, …
+├── run.sh              ← bash run.sh — sources config.sh, calls start.sh
 ├── start.sh            ← tmux session setup
 ├── stop.sh             ← kill session
 ├── orchestrator.sh     ← pure rule-based task dispatch
-├── worker.sh           ← bash infra + LLM code
-└── pm_tools.sh         ← shared PM helpers
+└── worker.sh           ← bash infra + LLM code
 ```
+
+PM/LC helpers (`pm_*`, `lc_*`) live in the skill submodule, not in
+`.tmp/claude-bot/`. Scripts source them from `${SKILLS_DIR}`.
 
 ## Checklist before running
 

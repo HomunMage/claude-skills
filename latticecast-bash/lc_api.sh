@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+# lc_api.sh — Thin curl wrappers around the LatticeCast HTTP API.
+# One function per route. No domain knowledge, no caching, no magic.
+#
+# Source this; it only defines functions, no side effects.
+#   source /path/to/latticecast-bash/lc_api.sh
+#
+# Caller MUST set before any lc_* call:
+#   LC_API           — base URL, e.g. http://localhost:13491/api/v1
+#   LC_AUTH_HEADER   — full header, e.g. "Authorization: Bearer claude"
+# Optional:
+#   LC_THROTTLE_MS   — sleep between calls (default 0)
+#
+# All functions write JSON/text to stdout on success and exit non-zero
+# on HTTP error (curl -sf), with the response body on stderr.
+
+# ── Internals ─────────────────────────────────────────────────────────────
+
+_lc_throttle() {
+    local ms="${LC_THROTTLE_MS:-0}"
+    [ "$ms" -gt 0 ] 2>/dev/null && sleep "$(awk "BEGIN{print $ms/1000}")"
+    return 0
+}
+
+_lc_check_env() {
+    : "${LC_API:?LC_API must be set (e.g. http://localhost:13491/api/v1)}"
+    : "${LC_AUTH_HEADER:?LC_AUTH_HEADER must be set (e.g. 'Authorization: Bearer ...')}"
+}
+
+# _lc_curl METHOD PATH [BODY_FILE] [EXTRA_HEADER ...]
+# Body, if any, is a file path; never a shell-substituted string.
+_lc_curl() {
+    _lc_check_env
+    _lc_throttle
+    local method="$1" path="$2" body_file="${3:-}"
+    shift 3 2>/dev/null || shift $#
+    local args=(-sf -X "$method" -H "$LC_AUTH_HEADER")
+    for h in "$@"; do args+=(-H "$h"); done
+    if [ -n "$body_file" ]; then
+        args+=(--data-binary "@${body_file}")
+    fi
+    local out err rc
+    err=$(mktemp)
+    out=$(curl "${args[@]}" "${LC_API}${path}" 2>"$err")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "lc_api: ${method} ${path} failed (curl rc=${rc})" >&2
+        cat "$err" >&2
+        rm -f "$err"
+        return "$rc"
+    fi
+    rm -f "$err"
+    printf '%s' "$out"
+}
+
+# Helper: serialize a JSON dict from a here-doc into a temp file path.
+# Usage:  body=$(_lc_json '{"foo":"bar"}'); ... ; rm -f "$body"
+_lc_json() {
+    local f
+    f=$(mktemp --suffix=.json)
+    printf '%s' "$1" > "$f"
+    printf '%s' "$f"
+}
+
+# URL-encode a single segment for path components (rough-and-ready).
+_lc_uenc() {
+    python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=""))' "$1"
+}
+
+# ── Health + auth ─────────────────────────────────────────────────────────
+
+lc_status() { _lc_curl GET "/status"; }
+
+# lc_login_password USER PASS → echoes access_token (raw)
+lc_login_password() {
+    local body; body=$(_lc_json "$(printf '{"user_name":"%s","password":"%s"}' "$1" "$2")")
+    local out rc
+    out=$(_lc_curl POST "/login/password" "$body" "Content-Type: application/json")
+    rc=$?
+    rm -f "$body"
+    [ "$rc" -ne 0 ] && return "$rc"
+    printf '%s' "$out" | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))"
+}
+
+# ── Workspaces ────────────────────────────────────────────────────────────
+
+lc_workspace_list()   { _lc_curl GET "/workspaces"; }
+lc_workspace_create() {
+    local body; body=$(_lc_json "$(printf '{"workspace_name":"%s"}' "$1")")
+    _lc_curl POST "/workspaces" "$body" "Content-Type: application/json"
+    local rc=$?; rm -f "$body"; return $rc
+}
+lc_workspace_member_add() {
+    # $1=workspace_id $2=user_name $3=role
+    local body; body=$(_lc_json "$(printf '{"user_name":"%s","role":"%s"}' "$2" "$3")")
+    _lc_curl POST "/workspaces/$1/members" "$body" "Content-Type: application/json"
+    local rc=$?; rm -f "$body"; return $rc
+}
+
+# ── Tables ────────────────────────────────────────────────────────────────
+
+lc_table_list() {
+    if [ -n "${1:-}" ]; then
+        _lc_curl GET "/tables?workspace_id=$1"
+    else
+        _lc_curl GET "/tables"
+    fi
+}
+lc_table_get()    { _lc_curl GET    "/tables/$1"; }
+lc_table_create() {
+    # $1=table_id $2=workspace_id
+    local body; body=$(_lc_json "$(printf '{"table_id":"%s","workspace_id":"%s"}' "$1" "$2")")
+    _lc_curl POST "/tables" "$body" "Content-Type: application/json"
+    local rc=$?; rm -f "$body"; return $rc
+}
+lc_table_delete() { _lc_curl DELETE "/tables/$1"; }
+
+# ── Columns (backed by __schema__) ────────────────────────────────────────
+
+lc_columns_list()   { _lc_curl GET    "/tables/$1/columns"; }
+lc_column_create()  {
+    local body; body=$(_lc_json "$2")
+    _lc_curl POST "/tables/$1/columns" "$body" "Content-Type: application/json"
+    local rc=$?; rm -f "$body"; return $rc
+}
+lc_column_update()  {
+    local body; body=$(_lc_json "$3")
+    _lc_curl PUT  "/tables/$1/columns/$2" "$body" "Content-Type: application/json"
+    local rc=$?; rm -f "$body"; return $rc
+}
+lc_column_delete()  { _lc_curl DELETE "/tables/$1/columns/$2"; }
+
+# ── Rows ──────────────────────────────────────────────────────────────────
+
+# lc_row_list TID [LIMIT] [FILTER_JSON]
+lc_row_list() {
+    local tid="$1" limit="${2:-100}" filter="${3:-}"
+    local q="limit=${limit}"
+    if [ -n "$filter" ]; then
+        local enc; enc=$(_lc_uenc "$filter")
+        q="${q}&filter_json=${enc}"
+    fi
+    _lc_curl GET "/tables/${tid}/rows?${q}"
+}
+
+# lc_row_create TID '{"row_data": {...}}' → echoes row_number
+lc_row_create() {
+    local body; body=$(_lc_json "$2")
+    local out rc
+    out=$(_lc_curl POST "/tables/$1/rows" "$body" "Content-Type: application/json")
+    rc=$?; rm -f "$body"; [ "$rc" -ne 0 ] && return $rc
+    printf '%s' "$out" | python3 -c "import sys,json; print(json.load(sys.stdin)['row_number'])"
+}
+
+# NB: GET /tables/{tid}/rows/{rn} (single-row GET) is NOT a backend route.
+# Use `lc_row_list TID 500` and filter client-side, or `lc_row_list TID 500
+# '<filter_json>'` to filter server-side.
+
+# lc_row_update TID RN JSON_BODY (e.g. '{"row_data": {...}}')
+lc_row_update() {
+    local body; body=$(_lc_json "$3")
+    _lc_curl PUT "/tables/$1/rows/$2" "$body" "Content-Type: application/json"
+    local rc=$?; rm -f "$body"; return $rc
+}
+lc_row_delete() { _lc_curl DELETE "/tables/$1/rows/$2"; }
+
+# ── Docs ──────────────────────────────────────────────────────────────────
+
+lc_doc_read()  { _lc_curl GET "/tables/$1/rows/$2/doc"; }
+
+# lc_doc_write TID RN [-f FILE]
+# Without -f: reads body from stdin.
+lc_doc_write() {
+    local tid="$1" rn="$2" file=""
+    if [ "${3:-}" = "-f" ] && [ -n "${4:-}" ]; then
+        file="$4"
+    else
+        file=$(mktemp)
+        cat > "$file"
+    fi
+    _lc_curl PUT "/tables/${tid}/rows/${rn}/doc" "$file" "Content-Type: text/plain"
+    local rc=$?
+    [ "${3:-}" != "-f" ] && rm -f "$file"
+    return $rc
+}
+
+# ── Views ─────────────────────────────────────────────────────────────────
+
+lc_view_list()       { _lc_curl GET    "/tables/$1/views"; }
+lc_view_create()     {
+    local body; body=$(_lc_json "$2")
+    _lc_curl POST "/tables/$1/views" "$body" "Content-Type: application/json"
+    local rc=$?; rm -f "$body"; return $rc
+}
+lc_view_update()     {
+    local body; body=$(_lc_json "$3")
+    _lc_curl PUT  "/tables/$1/views/$(_lc_uenc "$2")" "$body" "Content-Type: application/json"
+    local rc=$?; rm -f "$body"; return $rc
+}
+lc_view_delete()     { _lc_curl DELETE "/tables/$1/views/$(_lc_uenc "$2")"; }
+lc_view_order_get()  { _lc_curl GET    "/tables/$1/view-order"; }
+lc_view_order_put()  {
+    # $1=table_id $2=JSON array string e.g. '["A","B"]'
+    local body; body=$(_lc_json "$(printf '{"order":%s}' "$2")")
+    _lc_curl PUT "/tables/$1/view-order" "$body" "Content-Type: application/json"
+    local rc=$?; rm -f "$body"; return $rc
+}
+
+# ── Dashboard widget query ────────────────────────────────────────────────
+
+# lc_block_query TID VIEW_NAME BLOCK_ID [PARAMS_JSON]
+lc_block_query() {
+    local body; body=$(_lc_json "$(printf '{"params":%s}' "${4:-{}}")")
+    _lc_curl POST \
+        "/tables/$1/views/$(_lc_uenc "$2")/blocks/$(_lc_uenc "$3")/query" \
+        "$body" "Content-Type: application/json"
+    local rc=$?; rm -f "$body"; return $rc
+}
