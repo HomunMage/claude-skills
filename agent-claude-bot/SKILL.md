@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.29.0
+version: 0.29.1
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -187,7 +187,7 @@ Worker sets PM status to `done`. Orchestrator polls PM to detect completion — 
 
 ## Key Dependencies
 
-- `Skill(latticecast-bash)` — provides `lc_api.sh` (thin curl wrappers, generic).
+- `Skill(developing-lattice-cast)` — provides `lc_api.sh` (thin curl wrappers, generic).
 - `Skill(developing-project-management)` — provides `pm_tool.sh` (PM domain
   helpers; auto-sources `lc_api.sh` from the sibling skill).
 - `Skill(developing-programming)` — test/format/lint workflow.

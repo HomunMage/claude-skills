@@ -1,10 +1,10 @@
 ---
-name: latticecast-bash
+name: developing-lattice-cast
 description: Thin bash curl wrapper around the LatticeCast HTTP API — one function per route, no domain knowledge, no caching, no magic. Use as the foundation for project-specific tool layers (PM, SEO, dev tracking, etc.). Caller composes lc_api.sh + their own config.sh + domain helpers.
-version: 0.1.0
+version: 0.1.1
 ---
 
-# latticecast-bash
+# developing-lattice-cast
 
 `lc_api.sh` is a thin bash client over the LatticeCast HTTP API. One
 function per route. **No domain knowledge, no caching, no magic.** Each
@@ -105,7 +105,7 @@ lc_block_query TID VIEW_NAME BLOCK_ID [PARAMS_JSON]
 # In a consumer's tool layer (e.g. pm_tool.sh):
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/config.sh"               # exports LC_API, LC_AUTH_HEADER, …
-source "${SKILLS_DIR}/latticecast-bash/lc_api.sh"
+source "${SKILLS_DIR}/developing-lattice-cast/lc_api.sh"
 
 # now lc_* functions are available
 lc_status

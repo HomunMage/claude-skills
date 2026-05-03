@@ -4,11 +4,11 @@
 # Composition:   config.sh + lc_api.sh + pm_*  (this file)
 # Source order in your script:
 #   source <project>/config.sh                # exports LC_API, LC_AUTH_HEADER, …
-#   source <skills>/latticecast-bash/lc_api.sh
+#   source <skills>/developing-lattice-cast/lc_api.sh
 #   source <skills>/developing-project-management/pm_tool.sh
 #
 # pm_tool.sh sources lc_api.sh automatically from the sibling skill if
-# you haven't sourced it yourself. The latticecast-bash skill must live
+# you haven't sourced it yourself. The developing-lattice-cast skill must live
 # next to developing-project-management in the same .claude/skills/ tree.
 #
 # Required env (set by your config.sh):
@@ -26,7 +26,7 @@ set -uo pipefail
 _PM_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if ! declare -F lc_status >/dev/null; then
     # shellcheck disable=SC1091
-    source "${_PM_TOOL_DIR}/../latticecast-bash/lc_api.sh"
+    source "${_PM_TOOL_DIR}/../developing-lattice-cast/lc_api.sh"
 fi
 
 # ── Defaults ─────────────────────────────────────────────────────────────

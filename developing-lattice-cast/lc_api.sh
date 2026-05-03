@@ -3,7 +3,7 @@
 # One function per route. No domain knowledge, no caching, no magic.
 #
 # Source this; it only defines functions, no side effects.
-#   source /path/to/latticecast-bash/lc_api.sh
+#   source /path/to/developing-lattice-cast/lc_api.sh
 #
 # Caller MUST set before any lc_* call:
 #   LC_API           — base URL, e.g. http://localhost:13491/api/v1

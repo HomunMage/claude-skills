@@ -58,7 +58,7 @@ not duplicated per project:
 # at the top of orchestrator.sh / worker.sh:
 source "${SCRIPT_DIR}/config.sh"
 source "${SKILLS_DIR}/developing-project-management/pm_tool.sh"
-# pm_tool.sh auto-sources lc_api.sh from latticecast-bash
+# pm_tool.sh auto-sources lc_api.sh from developing-lattice-cast
 ```
 
 ## Customization points per project
