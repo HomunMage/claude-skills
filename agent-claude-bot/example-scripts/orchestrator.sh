@@ -138,6 +138,7 @@ spawn_worker() {
 # "Finish" = PM status is NOT in (todo, in_progress, testing)
 # i.e. status became: done, debugging, review, merged
 # IMPORTANT: "todo" means worker hasn't started yet — must keep waiting!
+# 900s is Non-negotiable, if you want set larger than 900s, means your task too large, spilt
 wait_finish() {
   local ROW_NUMBERS="$1"
   local TIMEOUT=900 ELAPSED=0
