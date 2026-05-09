@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.30.2
+version: 0.31.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -184,6 +184,74 @@ Worker sets PM status to `done`. Orchestrator polls PM to detect completion — 
 | **Plan** | [plan.md](plan.md) | Discuss design → create tickets in LatticeCast PM |
 | **Prepare** | [prepare.md](prepare.md) | Write project's `.tmp/claude-bot/config.sh` + scripts that source the skill |
 | **Run** | [running.md](running.md) | `bash run.sh`, `tmux attach`, `stop.sh`, recovery |
+
+## Monitoring — main Claude opens a sibling `<project>-monitor` tmux
+
+**The bot itself does not self-supervise.** Whenever you (the main Claude
+session, not a worker) call `bash run.sh`, you ALSO spawn a sibling tmux
+session that runs an independent monitoring loop. That loop polls every
+~3 minutes and reports whether the bot is making progress.
+
+Two equivalent ways to spawn the monitor — pick one based on how you
+want results delivered:
+
+### Option A — `ScheduleWakeup` from the main Claude session (simplest)
+
+The main Claude session calls `ScheduleWakeup` with `delaySeconds=180`
+and a self-replicating `prompt:` that re-checks `.tmp/out/orchestrator.log`,
+the worker log, and PM status, then re-schedules itself. Uses no tmux —
+the monitor lives entirely in the main session's wake cycle. Stops when
+orchestrator says `ALL DONE!`.
+
+Pros: no extra processes; reports inline in your conversation.
+Cons: ties up the main session's wake budget.
+
+### Option B — separate `<project>-monitor` tmux running `claude -p`
+
+```bash
+PROJECT="$(basename "$PROJECT_DIR")"  # same as the bot's session name
+MONITOR_SESSION="${PROJECT}-monitor"
+tmux kill-session -t "$MONITOR_SESSION" 2>/dev/null
+
+tmux new-session -d -s "$MONITOR_SESSION" -c "$PROJECT_DIR" \
+  "while true; do
+     claude -p --dangerously-skip-permissions --model sonnet '
+       Read tail of .tmp/out/orchestrator.log and worker_1.log.
+       Query PM (table_id=$TABLE_ID) for any rn currently in_progress / testing.
+       If a worker has 3+ Still working lines on the same step OR status==debugging, FLAG IT.
+       Run git log --oneline -3 — if a TIMEOUTed ticket has a matching commit, mark its PM status done.
+       Print one short paragraph: ticket, step, elapsed seconds.
+       If orchestrator log ends with ALL DONE, print STOP_MONITOR and exit.
+     '
+     grep -q STOP_MONITOR <<<\"$(tail -1 .tmp/out/monitor.log)\" && break
+     sleep 180
+   done | tee -a .tmp/out/monitor.log"
+```
+
+Pros: independent of main session; persists across `/clear`.
+Cons: extra tmux + a `claude -p` instance every 3 min.
+
+### What the monitor checks
+
+| Signal | What it means | Action |
+|--------|---------------|--------|
+| `3+ Still working` lines on the same step | LLM iterating on lint/test or stuck | flag, keep watching |
+| Worker step `debugging` | tests failed | flag, escalate after 2 cycles |
+| `TIMEOUT` in orchestrator log | 900s budget hit | check `git log` — if commit landed, mark PM `done` manually |
+| `ALL DONE!` and queue empty | bot finished | print summary table, stop the monitor |
+
+### Recovery rule (TIMEOUT after commit)
+
+The orchestrator times out workers at 900s. If the worker had already
+committed before the timeout, PM status will be stuck at `testing`/`review`
+even though the work is in `main`. The monitor MUST verify with
+`git log --oneline -5` and PUT the ticket to `done` so the next cycle
+doesn't reprocess it.
+
+### When NOT to spawn the monitor
+
+- Single-ticket runs you're attaching to interactively.
+- Dry-runs / debugging the bot scripts themselves.
 
 ## Key Dependencies
 
