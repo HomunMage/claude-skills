@@ -2,7 +2,7 @@
 name: developing-db-sql
 description: SQL writing — INSERT, UPSERT, indexing, JSONB. Use when writing or reviewing SQL statements, migrations, or schema changes.
 user-invocable: false
-version: 0.8.0
+version: 0.8.1
 ---
 
 # Safe SQL Rules
@@ -157,27 +157,36 @@ Key patterns:
 ## ALWAYS DUMP BEFORE MIGRATING
 
 **Before any migrate command on a real DB (`--apply-only` or the default
-full flow), dump the live DB first.** AWS Backup covers prod; dev/staging
-relies on this manual dump. If a migration loses or corrupts data you can
-restore from `.tmp/db_<timestamp>.sql` in seconds — without one, the data
-is gone.
+full flow), clone the live DB first.** `--dump` does a `CREATE DATABASE
+db_<YYYYMMDD_HHMMSS> WITH TEMPLATE db` — a sibling database on the same
+PG instance, byte-identical. AWS Backup covers prod; dev/staging relies
+on this clone.
 
 ```bash
 # Step 1 — ALWAYS, before any migrate command:
 docker compose --profile migration run --rm \
   --entrypoint python migration migrate.py --dump
-# → writes .tmp/db_<YYYYMMDD_HHMMSS>.sql
+# → creates DB `db_<YYYYMMDD_HHMMSS>` on the same PG instance
 
 # Step 2 — then run the migration:
 docker compose --profile migration run --rm migration --apply-only
 
-# Restore if needed:
-cat .tmp/db_<timestamp>.sql | docker compose exec -T db psql -U dba_user -d db
+# Restore if needed (rename swap, instant):
+docker compose exec -T db psql -U dba_user -d postgres <<'SQL'
+DROP DATABASE "db";
+ALTER DATABASE "db_<YYYYMMDD_HHMMSS>" RENAME TO "db";
+SQL
 ```
+
+The clone uses `CREATE DATABASE WITH TEMPLATE`, which requires the source
+DB to have no other active connections. `--dump` calls
+`pg_terminate_backend` on every other session before the clone, then
+sessions reconnect automatically. Storage cost ≈ size of the live DB
+(PG copies the data dir bytes).
 
 This rule is non-negotiable for any command that mutates the live DB.
 Past incident (2026-05-15): a `docker compose down -v` before pulling a
-new migration permanently destroyed user data because no dump existed.
+new migration permanently destroyed user data because no clone existed.
 
 ## Lint & Test: Migration Runner
 
