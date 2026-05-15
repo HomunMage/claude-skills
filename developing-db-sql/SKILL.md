@@ -2,7 +2,7 @@
 name: developing-db-sql
 description: SQL writing — INSERT, UPSERT, indexing, JSONB. Use when writing or reviewing SQL statements, migrations, or schema changes.
 user-invocable: false
-version: 0.7.0
+version: 0.8.0
 ---
 
 # Safe SQL Rules
@@ -105,6 +105,41 @@ command: >
   -c log_connections=on
   -c log_disconnections=on
 ```
+
+## Style: Align Columns and Function Params With Spaces
+
+In `CREATE TABLE` and `CREATE FUNCTION`, **align the type, constraint,
+and default columns vertically with spaces** (not tabs). Aligned blocks
+read like a table — eye can scan a column at a time instead of parsing
+each row token-by-token.
+
+```sql
+CREATE TABLE IF NOT EXISTS public.workspaces (
+    workspace_id   UUID      NOT NULL DEFAULT gen_random_uuid(),
+    workspace_name VARCHAR   NOT NULL DEFAULT '',
+    created_at     TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMP NOT NULL DEFAULT now(),
+    PRIMARY KEY (workspace_id)
+);
+
+CREATE OR REPLACE FUNCTION public.create_workspace(
+    p_workspace_name VARCHAR,
+    p_by             UUID
+) RETURNS JSONB
+
+```
+
+### Notes
+
+- Use **spaces only**, never tabs. PG, psql output, and most diffs render
+  spaces consistently; tabs drift between editors.
+- The `.sqlfluff` config for this project excludes `layout.spacing`
+  (LT01) and `layout.indent` (LT02) exactly so hand-aligned blocks
+  survive `sqlfluff fix`. Do **not** run `sqlfluff fix` on files that
+  have intentional alignment — it'll strip the spaces back to one.
+- When adding a new column to an existing aligned table, re-flow the
+  whole table's alignment if the new name is wider. The whole block
+  should look like one table after the edit.
 
 ## Idempotent SQL: Always use IF EXISTS / IF NOT EXISTS
 
