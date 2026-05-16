@@ -2,7 +2,7 @@
 name: developing-e2e-test
 description: End-to-end tests for LatticeCast — Playwright drives the real browser, every step verifies DB state directly, optional per-step snapshot.
 user-invocable: false
-version: 0.7.0
+version: 0.7.1
 ---
 
 # E2E Testing — Playwright + BE/DB Verification
@@ -52,7 +52,7 @@ test-e2e/
 ├── bootstrap.py             # PG INSERT admin + BE create user, idempotent
 ├── e2e_helper.py            # E2E ctx: page + paired UI/API asserts
 ├── snapshot_decorator.py    # @snapshot opt-in per-step screenshot
-└── test_e2e_<feature>.py    # your tests
+└── e2e_test_<feature>.py    # your tests
 ```
 
 Run:
@@ -62,7 +62,7 @@ Run:
 docker compose --profile test up -d browser test-e2e
 
 # Execute one test file (or all):
-docker compose exec test-e2e python3 /scripts/test_e2e_<feature>.py [--snapshot]
+docker compose exec test-e2e python3 /scripts/e2e_test_<feature>.py [--snapshot]
 ```
 
 **Connecting to the remote browser** — every test starts with:

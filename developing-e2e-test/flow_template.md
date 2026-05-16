@@ -61,6 +61,6 @@ step_delete_row             → DB: row gone;
 DELETE FROM auth.users WHERE user_name LIKE 'test\\_%' ESCAPE '\\';
 ```
 
-Use this as the skeleton for `browser/test_e2e_basic.py`. Add /
+Use this as the skeleton for `browser/e2e_test_basic.py`. Add /
 remove steps per feature focus, but **never skip the paired
 DB-check + UI-check** for any mutation.
