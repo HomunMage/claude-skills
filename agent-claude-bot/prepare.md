@@ -32,7 +32,7 @@ Read the example scripts in `.claude/skills/agent-claude-bot/example-scripts/` t
 - Loop: query todo → spawn workers → poll PM until done → cleanup
 
 ### 2e. `worker.sh` — bash infra + LLM code
-- Extract row_number from task description
+- Extract row_id from task description
 - Set status to `in_progress` immediately (bash, not LLM)
 - Build context from CLAUDE.md, README.md, skills, ticket doc
 - Pipeline: implement → test → commit → done

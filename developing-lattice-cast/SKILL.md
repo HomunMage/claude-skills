@@ -1,7 +1,7 @@
 ---
 name: developing-lattice-cast
 description: Thin bash curl wrapper around the LatticeCast HTTP API — one function per route, no domain knowledge, no caching, no magic. Use as the foundation for project-specific tool layers (PM, SEO, dev tracking, etc.). Caller composes lc_api.sh + their own config.sh + domain helpers.
-version: 0.1.1
+version: 0.2.0
 ---
 
 # developing-lattice-cast
@@ -54,38 +54,49 @@ lc_table_get   TID                → GET  /tables/{tid}
 lc_table_create TID WS_ID         → POST /tables {table_id, workspace_id}
 lc_table_delete TID               → DELETE /tables/{tid}
 
-# ── columns (backed by __schema__ row server-side) ───────────────────
-lc_columns_list   TID             → GET  /tables/{tid}/columns
-lc_column_create  TID JSON        → POST /tables/{tid}/columns
-lc_column_update  TID COL_ID JSON → PUT  /tables/{tid}/columns/{col_id}
+# ── columns ──────────────────────────────────────────────────────────
+# v40: per-aspect GET /columns was removed. Columns are in the GET
+# /tables/{tid} response's `columns` array, and every mutation returns
+# the full TableSchema. PATCH replaces the old PUT for updates.
+lc_column_create  TID JSON        → POST  /tables/{tid}/columns
+lc_column_update  TID COL_ID JSON → PATCH /tables/{tid}/columns/{col_id}
 lc_column_delete  TID COL_ID      → DELETE /tables/{tid}/columns/{col_id}
 
-# ── rows ──────────────────────────────────────────────────────────────
+# ── rows (v40: row_id is the identifier, was row_number) ────────────
 lc_row_list   TID [LIMIT] [FILTER_JSON]  → GET /tables/{tid}/rows[?…]
 lc_row_create TID JSON                   → POST /tables/{tid}/rows
                                             JSON = '{"row_data": {...}}'
-                                            echoes the new row's row_number
-lc_row_update TID RN JSON                → PUT  /tables/{tid}/rows/{rn}
-lc_row_delete TID RN                     → DELETE /tables/{tid}/rows/{rn}
+                                            echoes the new row's row_id (int)
+lc_row_get    TID ROW_ID                 → GET    /tables/{tid}/rows/{row_id}
+lc_row_update TID ROW_ID JSON            → PUT    /tables/{tid}/rows/{row_id}
+lc_row_delete TID ROW_ID                 → DELETE /tables/{tid}/rows/{row_id}
 
-# ── docs ──────────────────────────────────────────────────────────────
-lc_doc_read   TID RN              → GET /…/rows/{rn}/doc          (text out)
-lc_doc_write  TID RN [-f FILE]    → PUT /…/rows/{rn}/doc          (text in)
+# ── docs (keyed by row_id, same as rows) ────────────────────────────
+lc_doc_read   TID ROW_ID          → GET /…/rows/{row_id}/doc      (text out)
+lc_doc_write  TID ROW_ID [-f FILE]→ PUT /…/rows/{row_id}/doc      (text in)
                                     -f for files (avoids quoting hell);
                                     omit and pipe content via stdin.
 
-# ── views ─────────────────────────────────────────────────────────────
-lc_view_list      TID                  → GET /tables/{tid}/views
-lc_view_create    TID JSON             → POST /tables/{tid}/views
-lc_view_update    TID NAME JSON        → PUT  /tables/{tid}/views/{name}
-lc_view_delete    TID NAME             → DELETE /tables/{tid}/views/{name}
-lc_view_order_get TID                  → GET /tables/{tid}/view-order
-lc_view_order_put TID JSON_ARRAY       → PUT /tables/{tid}/view-order
-                                          body: {"order": [...]}
+# ── views (v40: view_id is the identifier, was view_name) ───────────
+# Display name + view type now live INSIDE config JSONB; pass them in
+# the body for create/update.
+lc_view_list   TID                     → GET    /tables/{tid}/views
+lc_view_get    TID VIEW_ID             → GET    /tables/{tid}/views/{view_id}
+lc_view_create TID JSON                → POST   /tables/{tid}/views
+                                          JSON = '{"name":"…","type":"kanban","config":{…}}'
+lc_view_update TID VIEW_ID JSON        → PUT    /tables/{tid}/views/{view_id}
+lc_view_delete TID VIEW_ID             → DELETE /tables/{tid}/views/{view_id}
+
+# Schema patch — order / default_view / col_order all live in
+# table_schemas.config; one endpoint, partial body, returns full schema.
+lc_schema_patch TID JSON               → PATCH /tables/{tid}/schema
+                                          JSON = any subset of
+                                          {view_order:[int…], default_view:int|null,
+                                           col_order:[col_id…]}
 
 # ── dashboard widget query ───────────────────────────────────────────
-lc_block_query TID VIEW_NAME BLOCK_ID [PARAMS_JSON]
-                                  → POST /tables/{tid}/views/{name}/blocks/{id}/query
+lc_block_query TID VIEW_ID BLOCK_ID [PARAMS_JSON]
+                                  → POST /tables/{tid}/views/{view_id}/blocks/{id}/query
 ```
 
 ## Behavior
@@ -120,8 +131,8 @@ lc_row_list "$TID" 200 '{"<status_col_id>":"todo"}' \
 
 - Token management — `lc_login_password` returns the token; persistence
   is the consumer's concern.
-- Column-id caching — fetch via `lc_columns_list`; cache it yourself if
-  needed. Caching policy varies by consumer.
+- Column-id caching — fetch from `lc_table_get TID` (`.columns` array);
+  cache it yourself if needed. Caching policy varies by consumer.
 - Domain workflows (PM ticket flow, SEO content pipeline, dashboard
   layouts) — those live in `pm_tool.sh`, `seo_tool.sh`, etc., which
   source this file.

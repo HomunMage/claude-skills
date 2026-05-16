@@ -35,7 +35,7 @@ pm_set_status() {
   local cur
   cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" \
     -H "Authorization: Bearer claude" | \
-    python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_number']==${ROW_NUMBER}),None); print(json.dumps(r['row_data']) if r else '{}')" 2>/dev/null)
+    python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_id']==${ROW_NUMBER}),None); print(json.dumps(r['row_data']) if r else '{}')" 2>/dev/null)
   local updated
   updated=$(echo "$cur" | python3 -c "import sys,json; d=json.load(sys.stdin); d['${STATUS_COL}']='${new_status}'; print(json.dumps(d))")
   curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_NUMBER}" \
@@ -91,12 +91,12 @@ if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
   log "Clean slate restored."
 fi
 
-# ─── Phase 2: Extract row_number from task desc ─────────────────────────────
-ROW_NUMBER=$(echo "$TASK_DESC" | grep -oP 'row_number=\K[0-9]+' || echo "")
+# ─── Phase 2: Extract row_id from task desc ─────────────────────────────
+ROW_NUMBER=$(echo "$TASK_DESC" | grep -oP 'row_id=\K[0-9]+' || echo "")
 PARENT_RN=$(echo "$TASK_DESC" | grep -oP 'parent=\K[0-9]+' || echo "")
 
 if [ -z "$ROW_NUMBER" ]; then
-  log "ERROR: No row_number in task desc"
+  log "ERROR: No row_id in task desc"
   echo "BLOCKED" > "$TRIGGER_FILE"
   exit 1
 fi
@@ -184,11 +184,11 @@ pm_set_status "review"
 
 while ! mkdir "$GIT_LOCK" 2>/dev/null; do sleep 2; done
 
-TICKET_TITLE=$(echo "$TASK_DESC" | sed 's/ (row_number=.*//' | cut -c1-72)
+TICKET_TITLE=$(echo "$TASK_DESC" | sed 's/ (row_id=.*//' | cut -c1-72)
 TYPE_COL=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json')).get('Type',''))" 2>/dev/null || echo "")
 TICKET_TYPE=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" \
   -H "Authorization: Bearer claude" | \
-  python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_number']==${ROW_NUMBER}),None); print(r['row_data'].get('${TYPE_COL}','task') if r else 'task')" 2>/dev/null || echo "task")
+  python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_id']==${ROW_NUMBER}),None); print(r['row_data'].get('${TYPE_COL}','task') if r else 'task')" 2>/dev/null || echo "task")
 
 git add -A 2>/dev/null || true
 git reset HEAD .tmp/ 2>/dev/null || true

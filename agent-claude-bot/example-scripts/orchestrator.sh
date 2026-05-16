@@ -65,7 +65,7 @@ recover_orphans() {
 import sys, json
 rows = json.load(sys.stdin)
 for r in rows:
-    print(r['row_number'])
+    print(r['row_id'])
 " 2>/dev/null)
 
   [ -z "$ORPHANS" ] && return
@@ -76,12 +76,12 @@ for r in rows:
 
   for rn in $ORPHANS; do
     # Worker windows are named w{N}-{type}-{rn} e.g. w1-task-182
-    # Check if any window contains this row_number
+    # Check if any window contains this row_id
     if ! echo "$ACTIVE_WINDOWS" | grep -q "\-${rn}$"; then
       # No worker windows at all → this ticket is orphaned
       local cur
       cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" | \
-        python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_number']==${rn}),None); print(json.dumps(r['row_data']) if r else '{}')" 2>/dev/null)
+        python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_id']==${rn}),None); print(json.dumps(r['row_data']) if r else '{}')" 2>/dev/null)
       local upd
       upd=$(echo "$cur" | python3 -c "import sys,json; d=json.load(sys.stdin); d['${SID}']='todo'; print(json.dumps(d))")
       curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" \
@@ -109,14 +109,14 @@ import sys, json
 rows = json.load(sys.stdin)
 tyid = '$(col Type)'; tid = '$(col Title)'; pid = '$(col Parent)'
 todo = [r for r in rows if r['row_data'].get(tyid) in ('task', 'bug')]
-todo.sort(key=lambda x: x['row_number'])
+todo.sort(key=lambda x: x['row_id'])
 if not todo:
     print('ALL_DONE')
 else:
     for i in range(${NUM_WORKERS}):
         if i < len(todo):
             r = todo[i]; d = r['row_data']
-            print(f'TASK{i+1}: {d.get(tid,\"?\")} (row_number={r[\"row_number\"]} parent={d.get(pid,\"\")})')
+            print(f'TASK{i+1}: {d.get(tid,\"?\")} (row_id={r[\"row_id\"]} parent={d.get(pid,\"\")})')
         else:
             print(f'TASK{i+1}: IDLE')
 " 2>/dev/null
@@ -127,7 +127,7 @@ spawn_worker() {
   local WID=$1 TASK="$2"
   # Escape single quotes in TASK to prevent shell injection in tmux command
   local SAFE_TASK="${TASK//\'/\'\\\'\'}"
-  local RN=$(echo "$TASK" | grep -oP 'row_number=\K[0-9]+' || echo "?")
+  local RN=$(echo "$TASK" | grep -oP 'row_id=\K[0-9]+' || echo "?")
   local TTYPE=$(echo "$TASK" | head -c 20 | tr ' ' '-' | tr -cd 'a-z0-9-')
   log "Spawn W${WID}: ${TASK}"
   tmux new-window -t "${SESSION}" -n "w${WID}-${TTYPE}-${RN}" \
@@ -156,7 +156,7 @@ rows = json.load(sys.stdin)
 active = '${ROW_NUMBERS}'.split()
 working = []
 for rn in active:
-    r = next((r for r in rows if str(r['row_number']) == rn), None)
+    r = next((r for r in rows if str(r['row_id']) == rn), None)
     if r:
         s = r['row_data'].get('${SID}', '')
         if s in ('todo', 'in_progress', 'testing'):
@@ -193,7 +193,7 @@ while [ "$CYCLE" -lt "$MAX_CYCLES" ]; do
   for i in $(seq 1 "$NUM_WORKERS"); do
     T=$(echo "$TASKS" | grep "^TASK${i}:" | sed "s/^TASK${i}: //")
     if [ -n "$T" ] && [ "$T" != "IDLE" ]; then
-      RN=$(echo "$T" | grep -oP 'row_number=\K[0-9]+' || echo "")
+      RN=$(echo "$T" | grep -oP 'row_id=\K[0-9]+' || echo "")
       spawn_worker "$i" "$T"
       ACTIVE="${ACTIVE} ${i}"; RNS="${RNS} ${RN}"
     else

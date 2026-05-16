@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.31.0
+version: 0.32.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -59,11 +59,11 @@ main
 Before creating a worktree, look up the issue's parent story in LatticeCast PM:
 
 ```bash
-# Get the issue row to find parent story row_number
-ISSUE_ROW_NUMBER="<row_number>"
+# Get the issue row to find parent story row_id
+ISSUE_ROW_NUMBER="<row_id>"
 TABLE_ID="<table_id>"
-# From row_data, get the Parent column value (= story row_number)
-# Then fetch that story row to get its type-<row_number> key (e.g. story-5)
+# From row_data, get the Parent column value (= story row_id)
+# Then fetch that story row to get its type-<row_id> key (e.g. story-5)
 # Story branch name: story/{story-key-lowercase}  e.g. story/story-5
 STORY_BRANCH="story/<story-key-lowercase>"
 ```
@@ -89,7 +89,7 @@ Each worker operates in its own worktree — no conflicts.
 ### Step 3: Pick Ticket → update status → READ DOC FIRST
 - Query LatticeCast PM for `todo` issues (type=task or type=bug)
 - **Update PM status → `in_progress` FIRST**
-- **READ THE DOC FIRST** via `GET /api/v1/tables/{table_id}/rows/{row_number}/doc`
+- **READ THE DOC FIRST** via `GET /api/v1/tables/{table_id}/rows/{row_id}/doc`
   - The doc has ALL implementation detail — what to do, which files, decisions, acceptance criteria
   - Title is just a short summary — **doc is the real spec**
   - If a previous worker attempted this ticket, the doc has their work log + what's left
@@ -97,21 +97,33 @@ Each worker operates in its own worktree — no conflicts.
 - Append to doc: `- {timestamp} Picked up by W{id}`
 - Work on ONLY that ticket
 
-**IMPORTANT: API uses `row_number` (integer) in URL, NOT `row_id` (UUID).**
+**IMPORTANT: API uses `row_id` (BIGINT, integer) in URL paths and JSON.
+The v0.40 squash renamed the old `row_number` field to `row_id`; the
+older UUID `row_id` shape is long gone.**
 
 ### Step 3.5: Check if Test Ticket
 - Check the ticket's Tags column in `row_data`
 - If tags contain `"test"` → this is a **test ticket**, go to Step 4T instead of Step 4
 - If tags do NOT contain `"test"` → normal implementation, go to Step 4
 
-### Step 4T: Test Ticket (tags contain "test")
-Instead of writing application code:
-1. Start browser: `docker compose --profile browser up -d browser`
-2. Write a Playwright test script in `browser/test_{feature}.py` if one doesn't exist
-3. Run: `docker compose exec browser python3 browser/test_{feature}.py`
-4. Screenshots saved to `.browser/`
-5. Append screenshot paths + pass/fail to ticket doc
-6. Go to Step 5 (commit the test script)
+### Step 4T: Test Ticket (title starts with `e2e_test_` or tags include `"test"`)
+Instead of writing application code, write + run one e2e test.
+
+1. Load `Skill(developing-e2e-test)` — follow its two-container
+   architecture (test-e2e runs the script, browser owns Chromium).
+2. Parse the test filename from the ticket title (the
+   `e2e_test_<scope>_<topic>.py` token).
+3. Bring both services up:
+   `docker compose --profile test up -d browser test-e2e`
+4. Write the test at `test-e2e/<filename>.py`, following the skill's
+   "one topic per file" rule and connecting via
+   `pw.chromium.connect(os.environ['BROWSER_WS'])`.
+5. Run it:
+   `docker compose exec -T test-e2e python3 /scripts/<filename>.py`
+6. Exit 0 → append `PASS` + any screenshot paths to ticket doc, go to
+   Step 5 (commit).
+   Non-zero → append stderr to doc, set status to `debugging`, retry
+   (max 3 attempts per Worker Rules).
 
 ### Step 4: Implement — MUST update doc continuously
 - Make the smallest possible change to complete the ticket
@@ -125,7 +137,7 @@ Instead of writing application code:
 
 ### Step 5: Test, Format, Lint, Commit
 Use `Skill(developing-programming)` workflow:
-- Update PM status → `testing` via `PUT /api/v1/tables/{table_id}/rows/{row_number}`
+- Update PM status → `testing` via `PUT /api/v1/tables/{table_id}/rows/{row_id}`
 - Run tests (if fail → `debugging`, append error to doc)
 - Format + lint
 - Commit → update PM status to `review`
@@ -147,7 +159,7 @@ Update PM status → `merged`
 After marking the issue merged, check sibling issues in PM:
 
 ```bash
-# Query all rows in table, filter by Parent = <story_row_number>
+# Query all rows in table, filter by Parent = <story_row_id>
 # If ALL sibling issues have status=merged:
 git checkout main
 git merge "$STORY_BRANCH"
@@ -168,13 +180,13 @@ Worker sets PM status to `done`. Orchestrator polls PM to detect completion — 
 - **If stuck after 3 attempts:** set PM status to `debugging`, stop.
 - **All tests must pass** before committing.
 - **Don't break existing tests.**
-- **Commit messages:** `<type>-<row_number>: <verb> <what>` (e.g., `task-42: add user auth endpoint`, `bug-7: fix login redirect`)
+- **Commit messages:** `<type>-<row_id>: <verb> <what>` (e.g., `task-42: add user auth endpoint`, `bug-7: fix login redirect`)
 - **Issue branches base off story branch, not main.**
 - **Story branches base off main.**
-- **CRITICAL: Continuously update the ticket doc.** Use `PUT /api/v1/tables/{table_id}/rows/{row_number}/doc` (row_number, NOT row_id). Append timestamped entries after EVERY action. Empty doc after work = FAILED.
-- **CRITICAL: FE changes MUST have `.browser/` snapshot.** Run `docker compose exec browser python3 -c "..."` with Playwright to screenshot. If the snapshot looks wrong, fix before committing.
-- **API uses row_number (integer) in URL paths**, not row_id (UUID). Example: `PUT /api/v1/tables/{tid}/rows/42` not `PUT /api/v1/rows/{uuid}`.
-- **NEVER POST new rows to update status.** Always use `PUT /api/v1/tables/{table_id}/rows/{row_number}` to update existing row_data. POST creates a NEW row with a new auto-generated Key — this causes duplicate rows (e.g. TO-* mirrors). Workers must ONLY update, never create.
+- **CRITICAL: Continuously update the ticket doc.** Use `PUT /api/v1/tables/{table_id}/rows/{row_id}/doc` (row_id, NOT row_id). Append timestamped entries after EVERY action. Empty doc after work = FAILED.
+- **CRITICAL: FE changes MUST have `.browser/` snapshot.** Run a Playwright check from `test-e2e` (`docker compose exec -T test-e2e python3 -c "..."` connecting via `BROWSER_WS`) — server-side `page.screenshot(path="/output/...")` lands at `.browser/...` on host. If the snapshot looks wrong, fix before committing.
+- **API uses row_id (integer) in URL paths**, not row_id (UUID). Example: `PUT /api/v1/tables/{tid}/rows/42` not `PUT /api/v1/rows/{uuid}`.
+- **NEVER POST new rows to update status.** Always use `PUT /api/v1/tables/{table_id}/rows/{row_id}` to update existing row_data. POST creates a NEW row with a new auto-generated Key — this causes duplicate rows (e.g. TO-* mirrors). Workers must ONLY update, never create.
 - **If stuck:** diagnose why, append error + analysis to ticket doc, try different approach. If can't finish in time: commit partial work, log what's done and what's left in doc, set status to `review`, signal DONE. Next worker picks up from where you left off by reading the doc.
 
 ## 3 Phases

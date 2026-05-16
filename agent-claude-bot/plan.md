@@ -70,8 +70,8 @@ Epic (1 per plan)
 ```
 
 **Epic** — the single top-level goal of this plan. Set `type=epic`.  
-**Story** — a feature area, phase, or user-facing capability. Set `type=story`, `Parent=<epic_row_number>`.  
-**Issue/Task** — a single implementation unit. Set `type=task` or `type=bug`, `Parent=<story_row_number>`.
+**Story** — a feature area, phase, or user-facing capability. Set `type=story`, `Parent=<epic_row_id>`.  
+**Issue/Task** — a single implementation unit. Set `type=task` or `type=bug`, `Parent=<story_row_id>`.
 
 Rules:
 - **Exactly 1 epic** per plan — never 0, never 2+
@@ -116,7 +116,7 @@ After creating all issues for a story, **always** add one more issue:
 - Title: `Test: snapshot {story_title}`
 - Type: `task`
 - Tags: `["test"]`
-- Parent: the story's row_number
+- Parent: the story's row_id
 
 This test ticket uses `.browser/` Playwright to snapshot-verify the story's features render correctly. Workers pick it up last (after all implementation issues are merged).
 
@@ -135,10 +135,10 @@ After user approves, use `Skill(developing-project-management)`:
 
 1. Use "Ensure LatticeCast is Running" — if not, prompt user
 2. Use "Setup Project" if PM table doesn't exist — create via template
-3. Create the **epic first**, note its `row_number`
-4. Create each **story** with `Parent=<epic_row_number>`, note each story's `row_number`
-5. Create each **issue** with `Parent=<story_row_number>` — never parent directly to epic
-6. **Write design content to ticket docs in MinIO** via `PUT /api/v1/tables/{table_id}/rows/{row_number}/doc`:
+3. Create the **epic first**, note its `row_id`
+4. Create each **story** with `Parent=<epic_row_id>`, note each story's `row_id`
+5. Create each **issue** with `Parent=<story_row_id>` — never parent directly to epic
+6. **Write design content to ticket docs in MinIO** via `PUT /api/v1/tables/{table_id}/rows/{row_id}/doc`:
 
    **Epic doc** — full design overview, architecture decisions, scope:
    ```markdown

@@ -68,13 +68,14 @@ pm_login() {
 
 # pm_cache_cols → fetches table columns and writes name→column_id map to
 # COL_CACHE as JSON. Idempotent; safe to call multiple times.
+# v40: per-aspect GET /columns is gone — read from GET /tables/{tid}.
 pm_cache_cols() {
     pm_login
-    lc_columns_list "${TABLE_ID}" \
+    lc_table_get "${TABLE_ID}" \
         | python3 -c '
 import sys, json
-cols = json.load(sys.stdin)
-out = {c["name"]: c["column_id"] for c in cols}
+t = json.load(sys.stdin)
+out = {c["name"]: c["column_id"] for c in t["columns"]}
 print(json.dumps(out))' \
         > "${COL_CACHE}"
 }
@@ -87,26 +88,20 @@ pm_col() {
 
 # ── Row helpers ──────────────────────────────────────────────────────────
 
-# pm_set_status RN STATUS — patches the Status field on the given row.
-# (Backend has no single-row GET; we list and pick by row_number.)
+# pm_set_status ROW_ID STATUS — patches the Status field on the given row.
+# v40: uses single-row GET; one round-trip instead of full table scan.
 pm_set_status() {
-    local rn="$1" status="$2"
+    local rid="$1" status="$2"
     pm_login
     local sid; sid=$(pm_col Status)
-    local cur upd
-    cur=$(lc_row_list "${TABLE_ID}" 500 \
-        | python3 -c "
-import sys, json
-rows = json.load(sys.stdin)
-r = next((r for r in rows if r['row_number'] == ${rn}), None)
-print(json.dumps(r['row_data']) if r else '{}')")
-    upd=$(printf '%s' "${cur}" \
-        | python3 -c "import sys,json;d=json.load(sys.stdin);d['${sid}']='${status}';print(json.dumps({'row_data':d}))")
-    lc_row_update "${TABLE_ID}" "${rn}" "${upd}" >/dev/null
+    local upd
+    upd=$(lc_row_get "${TABLE_ID}" "${rid}" \
+        | python3 -c "import sys,json; r=json.load(sys.stdin); r['row_data']['${sid}']='${status}'; print(json.dumps({'row_data':r['row_data']}))")
+    lc_row_update "${TABLE_ID}" "${rid}" "${upd}" >/dev/null
 }
 
 # pm_create_ticket TITLE TYPE PRIORITY [PARENT_RN]
-# Echoes the new row_number on success.
+# Echoes the new row_id on success.
 pm_create_ticket() {
     pm_login
     local title="$1" type="${2:-task}" priority="${3:-medium}" parent="${4:-}"
@@ -137,7 +132,7 @@ print(json.dumps({'row_data': rd}))")
     lc_row_create "${TABLE_ID}" "${row_data}"
 }
 
-# pm_get_todo_tasks → echoes "row_number|title" lines.
+# pm_get_todo_tasks → echoes "row_id|title" lines.
 pm_get_todo_tasks() {
     pm_login
     local SID; SID=$(pm_col Status)
@@ -149,9 +144,9 @@ pm_get_todo_tasks() {
 import sys, json
 rows = json.load(sys.stdin)
 todo = [r for r in rows if r['row_data'].get('${TY}') in ('task','bug')]
-todo.sort(key=lambda r: r['row_number'])
+todo.sort(key=lambda r: r['row_id'])
 for r in todo:
-    print(f\"{r['row_number']}|{r['row_data'].get('${TI}','?')}\")"
+    print(f\"{r['row_id']}|{r['row_data'].get('${TI}','?')}\")"
 }
 
 # ── Doc helpers ──────────────────────────────────────────────────────────

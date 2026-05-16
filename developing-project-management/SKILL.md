@@ -3,7 +3,7 @@ name: developing-project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal lib used by developing-programming, agent-claude-bot, developing-onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.8.1
+version: 0.9.0
 ---
 
 # LatticeCast Project Management
@@ -43,7 +43,7 @@ curl -s "http://localhost:13491/api/v1/tables/foo/rows" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-In `AUTH_REQUIRED=false` (dev), the password is ignored — any value works. The user must already exist in `auth.users` + `public.user_info`. New users are created by an admin via `POST /api/v1/admin/users` (see [setup.md](setup.md)).
+In `AUTH_REQUIRED=false` (dev), the password is ignored — any value works. The user must already exist in `auth.users` + `gdpr.user_info` (v40 merged the old `public.user_info` + `auth.gdpr` into one row). New users are created by an admin via `POST /api/v1/admin/users` (see [setup.md](setup.md)).
 
 ## ID Resolution
 
@@ -54,11 +54,15 @@ After login, the token IS the `user_id` (UUID). Other identifier fields (URL pat
 
 ## Row Addressing
 
-Rows use **row_number** (integer, auto-increment per table), NOT row_id (UUID).
+Rows use **`row_id`** (BIGINT, auto-increment per table). This was
+renamed from `row_number` in v0.40 — the field, JSON key, and URL
+segment are all `row_id` now.
 
 ```
-PUT /api/v1/tables/{table_id}/rows/{row_number}
-GET /api/v1/tables/{table_id}/rows/{row_number}/doc
+GET /api/v1/tables/{table_id}/rows/{row_id}
+PUT /api/v1/tables/{table_id}/rows/{row_id}
+GET /api/v1/tables/{table_id}/rows/{row_id}/doc
+PUT /api/v1/tables/{table_id}/rows/{row_id}/doc
 ```
 
 Use `filter_json` to query by JSONB field without pagination issues:
@@ -119,7 +123,7 @@ Statuses: `todo` → `in_progress` → `testing` → `review` → `merged` (also
 
 ```bash
 # CORRECT: PUT updates existing row
-curl -X PUT "http://localhost:13491/api/v1/tables/{table_id}/rows/{row_number}" \
+curl -X PUT "http://localhost:13491/api/v1/tables/{table_id}/rows/{row_id}" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"row_data": {...existing_data, "<status_col_id>": "in_progress"}}'
@@ -135,25 +139,25 @@ When creating a ticket, if `Start Date` or `Due Date` not specified, **default b
 ## Ticket Docs (MinIO)
 
 ```bash
-GET  /api/v1/tables/{table_id}/rows/{row_number}/doc   # read markdown
-PUT  /api/v1/tables/{table_id}/rows/{row_number}/doc   # save markdown (text/plain or multipart)
+GET  /api/v1/tables/{table_id}/rows/{row_id}/doc   # read markdown
+PUT  /api/v1/tables/{table_id}/rows/{row_id}/doc   # save markdown (text/plain or multipart)
 ```
 
 ### Recommended workflow: use `.tmp/issue/` as local scratch
 
 ```bash
 # 1. Download doc to local file
-mkdir -p .tmp/issue/{row_number}
-curl -s "http://localhost:13491/api/v1/tables/{table_id}/rows/{row_number}/doc" \
-  -H "Authorization: Bearer $TOKEN" > .tmp/issue/{row_number}/doc.md
+mkdir -p .tmp/issue/{row_id}
+curl -s "http://localhost:13491/api/v1/tables/{table_id}/rows/{row_id}/doc" \
+  -H "Authorization: Bearer $TOKEN" > .tmp/issue/{row_id}/doc.md
 
 # 2. Edit locally (append, rewrite, whatever)
-echo "- $(date -u +%Y-%m-%dT%H:%M:%SZ) Started by W1" >> .tmp/issue/{row_number}/doc.md
+echo "- $(date -u +%Y-%m-%dT%H:%M:%SZ) Started by W1" >> .tmp/issue/{row_id}/doc.md
 
 # 3. Upload back
-curl -X PUT "http://localhost:13491/api/v1/tables/{table_id}/rows/{row_number}/doc" \
+curl -X PUT "http://localhost:13491/api/v1/tables/{table_id}/rows/{row_id}/doc" \
   -H "Authorization: Bearer $TOKEN" \
-  -F file=@.tmp/issue/{row_number}/doc.md
+  -F file=@.tmp/issue/{row_id}/doc.md
 ```
 
 Avoids painful `--data-raw` escaping. Workers should use this pattern for all doc updates.
