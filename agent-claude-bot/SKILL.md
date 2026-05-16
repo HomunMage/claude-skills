@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.35.0
+version: 0.35.1
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -233,53 +233,17 @@ combination that exposes the full inner loop.
 
 ### Watchdog: kill claude-p if log goes silent
 
-In practice `claude -p` has been observed to hang silently after a few
-minutes — usually after spawning an `Agent`/`Explore` sub-agent or a
-long-running tool call. The subprocess stays alive but the stream-json
-pipe stops emitting events. Without a guard the ticket burns the full
-900s budget waiting.
+`claude -p` has been observed to hang silently after a few minutes —
+usually after spawning an `Agent`/`Explore` sub-agent or a long-running
+tool call. The subprocess stays alive but the stream-json pipe stops
+emitting events; without a guard the ticket burns the full 900s budget
+waiting.
 
-Wrap the `claude -p | formatter | tee` pipeline with a watchdog that
-samples the log file every 30s and kills `claude -p` if it hasn't grown
-for 120s:
-
-```bash
-step_llm() {
-    local name="$1" prompt="$2"
-    CLAUDECODE= claude -p --dangerously-skip-permissions --model sonnet \
-        --output-format=stream-json --verbose "$prompt" 2>&1 \
-      | python3 -u "${SCRIPT_DIR}/_format_stream.py" \
-      | tee -a "$LOG_FILE" &
-    local pipe_pid=$!
-    (
-        local last=$(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
-        local stuck=0
-        while kill -0 "$pipe_pid" 2>/dev/null; do
-            sleep 30
-            local cur=$(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
-            if [ "$cur" -eq "$last" ]; then
-                stuck=$((stuck + 30))
-                if [ "$stuck" -ge 120 ]; then
-                    pkill -TERM -P $$ -f "claude -p" 2>/dev/null || true
-                    sleep 2
-                    pkill -KILL -P $$ -f "claude -p" 2>/dev/null || true
-                    break
-                fi
-            else
-                last=$cur; stuck=0
-            fi
-        done
-    ) &
-    local watchdog_pid=$!
-    wait "$pipe_pid" 2>/dev/null
-    kill "$watchdog_pid" 2>/dev/null || true
-}
-```
-
-When the watchdog fires, the pipeline exits non-zero → `worker.sh`'s
-ERR trap flips the PM row to `debugging` and the orchestrator advances
-to the next ticket. You trade a 120s detection delay for 780s of
-otherwise-wasted budget.
+The `example-scripts/worker.sh` `step()` function wraps the pipeline
+with a watchdog that samples the log file every 30s and kills
+`claude -p` if it hasn't grown for 120s. When it fires, the pipeline
+exits non-zero → ERR trap flips the row to `debugging` → orchestrator
+advances. 120s detection traded for 780s of otherwise-wasted budget.
 
 ## 3 Phases
 

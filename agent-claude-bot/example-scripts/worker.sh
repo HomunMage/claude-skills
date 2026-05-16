@@ -76,13 +76,47 @@ step() {
   # tool_result, final result). format_claude_stream.py renders each
   # event as one human-readable line so `tmux attach` shows progress
   # in real time instead of waiting for the final blob.
+  #
+  # Watchdog: claude -p has been observed to hang silently after a few
+  # minutes (Agent/Explore sub-agent stall or API hangup that doesn't
+  # surface in the pipe). Sample the log file every 30s; kill the
+  # process if it hasn't grown for 120s. ERR trap then flips the row
+  # to `debugging` and the orchestrator advances — trading 120s
+  # detection for 780s of otherwise-wasted budget.
   CLAUDECODE= claude -p \
     --dangerously-skip-permissions \
     --model sonnet \
     --output-format=stream-json --verbose \
     "${prompt}" 2>&1 \
   | python3 -u "${SCRIPT_DIR}/format_claude_stream.py" \
-  | tee -a "$LOG_FILE"
+  | tee -a "$LOG_FILE" &
+  local pipe_pid=$!
+
+  (
+    local last=$(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
+    local stuck=0
+    while kill -0 "$pipe_pid" 2>/dev/null; do
+      sleep 30
+      local cur=$(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
+      if [ "$cur" -eq "$last" ]; then
+        stuck=$((stuck + 30))
+        if [ "$stuck" -ge 120 ]; then
+          log "Watchdog: no log growth for 120s — killing claude -p"
+          pkill -TERM -P $$ -f "claude -p" 2>/dev/null || true
+          sleep 2
+          pkill -KILL -P $$ -f "claude -p" 2>/dev/null || true
+          break
+        fi
+      else
+        last=$cur
+        stuck=0
+      fi
+    done
+  ) &
+  local watchdog_pid=$!
+
+  wait "$pipe_pid" 2>/dev/null
+  kill "$watchdog_pid" 2>/dev/null || true
 }
 
 # If any step fails, signal BLOCKED and exit
