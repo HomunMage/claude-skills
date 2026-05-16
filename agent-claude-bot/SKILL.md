@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.32.0
+version: 0.33.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -188,6 +188,20 @@ Worker sets PM status to `done`. Orchestrator polls PM to detect completion — 
 - **API uses row_id (integer) in URL paths**, not row_id (UUID). Example: `PUT /api/v1/tables/{tid}/rows/42` not `PUT /api/v1/rows/{uuid}`.
 - **NEVER POST new rows to update status.** Always use `PUT /api/v1/tables/{table_id}/rows/{row_id}` to update existing row_data. POST creates a NEW row with a new auto-generated Key — this causes duplicate rows (e.g. TO-* mirrors). Workers must ONLY update, never create.
 - **If stuck:** diagnose why, append error + analysis to ticket doc, try different approach. If can't finish in time: commit partial work, log what's done and what's left in doc, set status to `review`, signal DONE. Next worker picks up from where you left off by reading the doc.
+
+## Live worker progress (stream-json + formatter)
+
+Workers call `claude -p --output-format=stream-json --verbose` and pipe
+through `example-scripts/format_claude_stream.py`. Every event the LLM
+emits — thinking blocks, tool calls, tool results, the final cost —
+gets rendered as one short line. So when you `tmux attach -t <session>`
+and switch into a worker window, you see the bot's progress in real
+time instead of waiting for one giant blob at the end of a slow call.
+
+`claude -p` alone streams the final text only. `--verbose` alone does
+nothing for tool-less prompts. The pair `--output-format=stream-json
+--verbose` (with `format_claude_stream.py` to format it) is the only
+combination that exposes the full inner loop.
 
 ## 3 Phases
 

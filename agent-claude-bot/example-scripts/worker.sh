@@ -69,10 +69,17 @@ step() {
   local step_name="$1"
   local prompt="$2"
   log "Step: ${step_name}..."
+  # stream-json + verbose = live event stream (thinking, tool_use,
+  # tool_result, final result). format_claude_stream.py renders each
+  # event as one human-readable line so `tmux attach` shows progress
+  # in real time instead of waiting for the final blob.
   CLAUDECODE= claude -p \
     --dangerously-skip-permissions \
     --model sonnet \
-    "${prompt}" 2>&1 | tee -a "$LOG_FILE"
+    --output-format=stream-json --verbose \
+    "${prompt}" 2>&1 \
+  | python3 -u "${SCRIPT_DIR}/format_claude_stream.py" \
+  | tee -a "$LOG_FILE"
 }
 
 # If any step fails, signal BLOCKED and exit
