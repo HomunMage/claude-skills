@@ -14,8 +14,11 @@ PROJECT_DIR="${1:?Usage: worker.sh <project_dir> <worker_id> [task_description]}
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 WORKER_ID="${2:?Worker ID required}"
 TASK_DESC="${3:-}"
-# No trigger files — orchestrator polls PM status instead
-LOG_FILE="${PROJECT_DIR}/.tmp/out/worker_${WORKER_ID}.log"
+# row_id is parsed out of TASK_DESC below (`row_id=NN`) so each ticket
+# gets its own log file: worker_<wid>_<row_id>.log. Easier to triage a
+# specific failure than scrolling through a shared worker_<wid>.log.
+ROW_ID=$(echo "$TASK_DESC" | grep -oP 'row_id=\K[0-9]+' || echo "0")
+LOG_FILE="${PROJECT_DIR}/.tmp/out/worker_${WORKER_ID}_${ROW_ID}.log"
 GIT_LOCK="${PROJECT_DIR}/_git.lock"
 PM_URL="${LC_API%/api/v1}"
 TABLE_ID="${TABLE_ID:-}"
