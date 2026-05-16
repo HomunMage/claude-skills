@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.33.0
+version: 0.34.0
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -18,6 +18,34 @@ Start a tmux-based orchestrator that runs N workers in parallel to solve project
 5. User approve start workers
 6. Workers: query PM → pick todo ticket → worktree branch → implement → update status → merge
 ```
+
+## Ticket Sizing — 900s Hard Cap
+
+Every worker has a **900-second wall clock** before the orchestrator
+gives up on it and kills the tmux window. This is non-negotiable —
+don't raise it. If a ticket can't be completed in 15 minutes of
+worker time, **the ticket is too big — split it before opening**.
+
+Practical sizing rules when filing tickets:
+
+- **One file changed.** If the implementation touches >1 file, the
+  description is mixing concerns. Split.
+- **One topic** (for tests this is enforced by `developing-e2e-test`'s
+  one-topic-per-file rule).
+- **<300 lines of new code.** Skim the description: if it sounds like
+  "add column type X _and_ wire it through 4 views", that's 5 tickets,
+  not 1.
+- **Smoke test rerunable in <60s.** Tests that need long-running
+  Docker setup or external services blow the budget on docker compose
+  warm-up alone.
+
+Signals you went too big:
+- Orchestrator log shows `Still working: [N] (900s)` → `TIMEOUT after
+  900s` → ticket should be split.
+- Worker hits `debugging` 3+ times — usually means the ticket
+  description doesn't constrain the surface area enough.
+
+Recovery from a TIMEOUT: see "Recovery rule" below.
 
 ## Prerequisites
 
