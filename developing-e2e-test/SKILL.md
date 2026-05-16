@@ -2,7 +2,7 @@
 name: developing-e2e-test
 description: End-to-end tests for LatticeCast — Playwright drives the real browser, every step verifies DB state directly, optional per-step snapshot.
 user-invocable: false
-version: 0.8.0
+version: 0.9.0
 ---
 
 # E2E Testing — Playwright + BE/DB Verification
@@ -130,3 +130,57 @@ the full progression up to the break.
 4. No conditional skipping. Failures must be loud.
 5. Idempotent setup. Re-runs produce same result.
 6. `@snapshot` opt-in. Default off (CI stays fast).
+
+## CRITICAL: Tests describe intended behavior — FIX SOURCE, never workaround in test
+
+The test file encodes the **intended behavior** of the product. If a
+test fails, **the source code is wrong, not the test.** Fix the FE/BE,
+do NOT mutate the test to match buggy behavior.
+
+This is non-negotiable. A test that's been twisted to make a buggy app
+green is worse than no test — it lies about what the product does and
+guarantees the bug ships.
+
+### Banned "workaround" patterns
+
+Every one of these is a red flag that you're papering over a real bug:
+
+| Pattern | What it usually hides | What to do instead |
+|---|---|---|
+| `page.wait_for_timeout(N)` | slow / unobservable state change | `page.expect_response("**/api/...")`; or add a `data-status` attr in FE and `wait_for_selector('[data-status="ready"]')` |
+| `time.sleep(N)` | same | same |
+| `try: ... except: pass` (around an assert) | flaky FE / missing testid | fix the FE; never swallow |
+| `if elem.is_visible(): ...` (conditional assert) | the test doesn't actually require it → DELETE it. Otherwise it's a real bug → fix FE | one or the other, never "maybe" |
+| Changing a `[data-testid="X"]` selector to a text-/CSS-based one because the testid is missing | FE forgot the testid | **add the missing testid to the FE component** |
+| Adding `wait_until="networkidle"` AND a follow-up `wait_for_timeout` | hydration race | wait for a real signal (testid, response) |
+| `pytest.skip` / `# TODO` / `# brittle` / `# flaky` | unfixed bug being hidden | open a bug ticket and fix it; do not skip |
+
+`@snapshot` decorator failures and the screenshot helper itself are
+the **only** legitimate uses of `except: pass` — and only around the
+screenshot call, never around an assert.
+
+### When the test reveals a real bug
+
+1. Run the test, see it fail.
+2. Read the failure. If the source is wrong (missing testid, broken
+   route, wrong response shape, slow PATCH with no observable signal),
+   **edit the FE/BE source** to fix it.
+3. Re-run the test. If it now passes against the fixed source, commit
+   the FE/BE fix *and* the test together — that's one merged behavior.
+4. If you genuinely can't fix the source in this ticket (e.g. cross-team
+   change), **fail the test loudly**, append the failure to the ticket
+   doc with the proposed source fix, and stop. Do **not** twist the
+   test.
+
+### Things you ARE allowed to touch
+
+When working on an e2e test ticket, "scope" includes:
+- `frontend/src/**` — add missing `data-testid`, fix wrong selectors,
+  expose state in DOM, fix broken hydration.
+- `backend/src/**` — fix wrong response shape, add missing endpoints,
+  fix race conditions exposed by the test.
+- `migration/V*.sql` (forward-only) — only if the source-of-truth
+  schema is wrong; coordinate via skill `developing-db-sql`.
+
+The ticket title is `e2e_test_*` but the *scope* is the whole behavior
+the test exercises. Test files are read-only mirrors of intent.
