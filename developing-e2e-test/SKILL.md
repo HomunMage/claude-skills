@@ -2,7 +2,7 @@
 name: developing-e2e-test
 description: End-to-end tests for LatticeCast — Playwright drives the real browser, every step verifies DB state directly, optional per-step snapshot.
 user-invocable: false
-version: 0.7.1
+version: 0.8.0
 ---
 
 # E2E Testing — Playwright + BE/DB Verification
@@ -43,6 +43,32 @@ version: 0.7.1
   land on the host.
 - Tests live in `./test-e2e/`, bind-mounted at `/scripts` in test-e2e.
 
+## One topic per file
+
+**Each test file covers exactly ONE topic.** A "topic" is one
+user-visible behavior that fails or passes as a unit (e.g. *kanban
+group_by persists across navigation*). When the file grows past one
+topic, split it. Naming makes the scope explicit:
+
+| Prefix | Scope | Examples |
+|---|---|---|
+| `e2e_test_<feature>.py` | High-level smoke / cross-cutting flow | `e2e_test_auth.py`, `e2e_test_seo_framework.py` |
+| `e2e_test_views_<topic>.py` | Behavior that applies to **all** view types | `e2e_test_views_order.py` (drag-reorder tabs), `e2e_test_views_default.py` (last-clicked sticks), `e2e_test_views_rename.py` |
+| `e2e_test_view_<type>_<topic>.py` | Behavior of **one** view type | `e2e_test_view_kanban_groupby.py`, `e2e_test_view_table_col_order.py`, `e2e_test_view_timeline_drag_resize.py` |
+| `e2e_test_column_<topic>.py` | Column-level, propagates across views | `e2e_test_column_option_colors.py`, `e2e_test_column_rename.py` |
+
+Cross-view tests (`e2e_test_views_*`) MUST exercise the topic on at
+least two different view types to prove the persistence is not
+view-type-specific. Per-view tests (`e2e_test_view_<type>_*`) MUST
+also assert a *negative* case where switching to another view (or
+another table and back) preserves the configured state.
+
+Each file:
+- One scenario, top-to-bottom imperative script.
+- API verify + UI assert on every step (three pillars).
+- < 300 lines. If you're past that, split or factor a helper.
+- Idempotent setup using `bootstrap.py` or its own setup block.
+
 ## Layout
 
 ```
@@ -52,7 +78,7 @@ test-e2e/
 ├── bootstrap.py             # PG INSERT admin + BE create user, idempotent
 ├── e2e_helper.py            # E2E ctx: page + paired UI/API asserts
 ├── snapshot_decorator.py    # @snapshot opt-in per-step screenshot
-└── e2e_test_<feature>.py    # your tests
+└── e2e_test_<scope>_<topic>.py  # ONE topic per file (see table above)
 ```
 
 Run:
