@@ -89,14 +89,20 @@ pm_col() {
 # ── Row helpers ──────────────────────────────────────────────────────────
 
 # pm_set_status ROW_ID STATUS — patches the Status field on the given row.
-# v40: uses single-row GET; one round-trip instead of full table scan.
+# Backend has no single-row GET; we list and pick by row_id.
 pm_set_status() {
     local rid="$1" status="$2"
     pm_login
     local sid; sid=$(pm_col Status)
-    local upd
-    upd=$(lc_row_get "${TABLE_ID}" "${rid}" \
-        | python3 -c "import sys,json; r=json.load(sys.stdin); r['row_data']['${sid}']='${status}'; print(json.dumps({'row_data':r['row_data']}))")
+    local cur upd
+    cur=$(lc_row_list "${TABLE_ID}" 500 \
+        | python3 -c "
+import sys, json
+rows = json.load(sys.stdin)
+r = next((r for r in rows if r['row_id'] == ${rid}), None)
+print(json.dumps(r['row_data']) if r else '{}')")
+    upd=$(printf '%s' "${cur}" \
+        | python3 -c "import sys,json;d=json.load(sys.stdin);d['${sid}']='${status}';print(json.dumps({'row_data':d}))")
     lc_row_update "${TABLE_ID}" "${rid}" "${upd}" >/dev/null
 }
 

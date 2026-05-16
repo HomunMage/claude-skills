@@ -157,8 +157,9 @@ lc_row_create() {
     printf '%s' "$out" | python3 -c "import sys,json; print(json.load(sys.stdin)['row_id'])"
 }
 
-# lc_row_get TID ROW_ID  (v40 added single-row GET).
-lc_row_get() { _lc_curl GET "/tables/$1/rows/$2"; }
+# NB: GET /tables/{tid}/rows/{row_id} (single-row GET) is NOT a backend
+# route. Use `lc_row_list TID 500` and filter client-side, or
+# `lc_row_list TID 500 '<filter_json>'` to filter server-side.
 
 # lc_row_update TID ROW_ID JSON_BODY (e.g. '{"row_data": {...}}')
 lc_row_update() {

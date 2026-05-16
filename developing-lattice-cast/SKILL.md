@@ -67,8 +67,8 @@ lc_row_list   TID [LIMIT] [FILTER_JSON]  → GET /tables/{tid}/rows[?…]
 lc_row_create TID JSON                   → POST /tables/{tid}/rows
                                             JSON = '{"row_data": {...}}'
                                             echoes the new row's row_id (int)
-lc_row_get    TID ROW_ID                 → GET    /tables/{tid}/rows/{row_id}
 lc_row_update TID ROW_ID JSON            → PUT    /tables/{tid}/rows/{row_id}
+# (no single-row GET — use lc_row_list with filter_json instead)
 lc_row_delete TID ROW_ID                 → DELETE /tables/{tid}/rows/{row_id}
 
 # ── docs (keyed by row_id, same as rows) ────────────────────────────
