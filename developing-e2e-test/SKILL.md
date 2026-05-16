@@ -2,7 +2,7 @@
 name: developing-e2e-test
 description: End-to-end tests for LatticeCast — Playwright drives the real browser, every step verifies DB state directly, optional per-step snapshot.
 user-invocable: false
-version: 0.9.0
+version: 0.9.1
 ---
 
 # E2E Testing — Playwright + BE/DB Verification
@@ -158,6 +158,31 @@ Every one of these is a red flag that you're papering over a real bug:
 `@snapshot` decorator failures and the screenshot helper itself are
 the **only** legitimate uses of `except: pass` — and only around the
 screenshot call, never around an assert.
+
+### "Hard to test" = FE is not test-friendly = FE bug, not test bug
+
+If you find yourself reaching for `wait_for_timeout` or text/CSS
+selectors because there's no `data-testid` or no observable state on
+the element you need — **that is a missing-affordance bug in the FE,
+not a test problem.** The fix is to **add the missing testid / state
+attribute to the FE component**, not to settle for a brittle selector.
+
+Concretely, when a needed element is hard to address:
+
+- Missing `data-testid` on a button / input / row → add it to the
+  `.svelte` component. Naming: `{component}-{element}` (e.g.
+  `col-drag-handle-{col_id}`). See `developing-svelte` skill for the
+  full Robot Awareness rules.
+- No way to know when a network round-trip finished → either wait on
+  the actual response (`page.expect_response(...)`), or expose a
+  `data-status="ready" / "loading"` attribute in the FE and wait on
+  that.
+- Hydration race / "the page loads but the data appears 300ms later"
+  → expose a `data-hydrated="true"` (or similar) on the root once the
+  initial load is done; wait for that, not a hard sleep.
+
+Adding affordances to make code testable is part of the test ticket's
+scope. Workarounds in the test file are not.
 
 ### When the test reveals a real bug
 
