@@ -2,7 +2,7 @@
 name: developing-e2e-test
 description: End-to-end tests for LatticeCast — Playwright drives the real browser, every step verifies DB state directly, optional per-step snapshot.
 user-invocable: false
-version: 0.9.1
+version: 0.10.0
 ---
 
 # E2E Testing — Playwright + BE/DB Verification
@@ -199,13 +199,48 @@ scope. Workarounds in the test file are not.
 
 ### Things you ARE allowed to touch
 
-When working on an e2e test ticket, "scope" includes:
-- `frontend/src/**` — add missing `data-testid`, fix wrong selectors,
-  expose state in DOM, fix broken hydration.
-- `backend/src/**` — fix wrong response shape, add missing endpoints,
-  fix race conditions exposed by the test.
+When working on an e2e test ticket, "scope" includes **test-affordance
+fixes only** — making existing-but-broken behavior testable:
+
+- `frontend/src/**` — add missing `data-testid` to existing components,
+  fix wrong selectors, expose existing state as `data-*` attributes,
+  fix broken hydration of features that already exist.
+- `backend/src/**` — fix wrong response shape on existing endpoints,
+  fix race conditions on existing endpoints, add `populate_existing` /
+  cache-busting on existing reads.
 - `migration/V*.sql` (forward-only) — only if the source-of-truth
-  schema is wrong; coordinate via skill `developing-db-sql`.
+  schema is wrong for an existing feature; coordinate via skill
+  `developing-db-sql`.
+
+### NEVER add new product behavior
+
+A test ticket lets you **make existing behavior visible to the test**.
+It does **NOT** authorise you to **implement new product behavior**
+that doesn't exist yet — even if the ticket title implies the feature
+should exist.
+
+Concretely, **never**:
+- Add a new BE route or HTTP method that the product doesn't already
+  expose (e.g. don't add `PUT /views/{id}` for "change-view-type" if
+  no such mutation exists today).
+- Add a new FE button, modal, store action, or event handler that
+  triggers behavior the product doesn't already do.
+- Add new fields/columns/state slots that the existing UI doesn't
+  already read or write.
+
+If the ticket implies a feature that isn't built yet:
+
+1. Stop immediately. Do not write the test, do not edit FE/BE.
+2. Append to the ticket doc: `NOT IMPLEMENTED: <feature> does not
+   exist in the product. <one-line rationale>. Either close this
+   ticket or split into (a) a feature ticket for the missing
+   functionality, (b) a test ticket that runs against the new
+   feature once it's merged.`
+3. Exit cleanly (status flips to `debugging` or `review`).
+
+A passing test against a feature you just invented is worse than no
+test — it ships fake behavior and locks it into the product.
 
 The ticket title is `e2e_test_*` but the *scope* is the whole behavior
-the test exercises. Test files are read-only mirrors of intent.
+the test exercises **that already exists**. Test files are read-only
+mirrors of intent for existing functionality.
