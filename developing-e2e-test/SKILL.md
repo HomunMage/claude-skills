@@ -2,7 +2,7 @@
 name: developing-e2e-test
 description: End-to-end tests — pytest + Playwright drives a real browser, every step verifies DB state, optional per-step snapshot.
 user-invocable: false
-version: 0.12.0
+version: 0.14.0
 ---
 
 # E2E Testing — pytest + Playwright + BE/DB Verification
@@ -36,10 +36,15 @@ Tests live in **domain folders**, each with `__init__.py`:
 ```
 test-e2e/
 ├── conftest.py           # shared fixtures
-├── <domain>/             # one folder per domain
-│   ├── __init__.py
-│   └── test_<topic>.py   # one topic per file
+├── e2e_base.py           # utility module (login, api, connect_browser, seed_login_info)
+├── auth/                 # login, admin, user config
+├── workspace/            # CRUD, members, roles
+├── tables/               # columns, rows, filters, inline edit
+├── table_views/          # kanban, timeline, view CRUD
+└── template/             # PM, CRM, SEO framework templates
 ```
+
+Each folder has `__init__.py` + `test_<topic>.py` files.
 
 **One topic per file.** A "topic" is one user-visible behavior that
 fails or passes as a unit. < 300 lines. Split when it grows.
@@ -52,13 +57,20 @@ and back.
 
 Shared fixtures auto-discovered by pytest:
 
+- `snapshot` (function) — `True` when `--snapshot` flag passed, controls screenshot capture
 - `browser` (session) — connect via `BROWSER_WS`, yield, close
-- `page` (function) — new page per test, auto-close
-- `admin_token` (session) — login, return JWT
-- `authed_page` (function) — page with auth cookie set
-- `workspace` (function) — create temp workspace, yield, delete after
+- `page` (function) — new page per test (1400×900), auto-close
+- `admin_token` (session) — `login("lattice")`, return JWT
+- `authed_page` (function) — page with auth cookie + seed_login_info for admin
+- `workspace` (function) — create temp workspace, yield `(ws_id, ws_name)`, delete after
+- `pm_table` (function) — create PM template table in workspace, yield `(table_id, ws_id, columns, views)`
 
 Tests declare what they need by parameter name — no manual setup/teardown.
+
+Utility helpers available via `from e2e_base import BASE, api`:
+
+- `BASE` — backend URL (`BASE_URL` env, default `http://localhost:13491`)
+- `api(method, path, token, **kw)` — authenticated request wrapper
 
 ## Running
 
@@ -73,6 +85,9 @@ docker compose exec -T test-e2e pytest <domain>/ -v
 
 # one file
 docker compose exec -T test-e2e pytest <domain>/test_<topic>.py -v
+
+# with screenshots (saved to .browser/)
+docker compose exec -T test-e2e pytest <domain>/test_<topic>.py -v --snapshot
 ```
 
 ## Sub-files (lazy)
@@ -87,7 +102,7 @@ docker compose exec -T test-e2e pytest <domain>/test_<topic>.py -v
 3. No `sleep()`. Use Playwright `wait_for_*`.
 4. No conditional skipping. Failures must be loud.
 5. Idempotent setup via conftest fixtures.
-6. `@snapshot` opt-in. Default off (CI stays fast).
+6. `--snapshot` opt-in. Default off (CI stays fast).
 
 ## CRITICAL: FIX SOURCE, never workaround in test
 
