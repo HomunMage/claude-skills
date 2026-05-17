@@ -1,11 +1,11 @@
 ---
 name: developing-e2e-test
-description: End-to-end tests for LatticeCast — Playwright drives the real browser, every step verifies DB state directly, optional per-step snapshot.
+description: End-to-end tests for LatticeCast — pytest + Playwright drives the real browser, every step verifies DB state directly, optional per-step snapshot.
 user-invocable: false
-version: 0.10.0
+version: 0.11.0
 ---
 
-# E2E Testing — Playwright + BE/DB Verification
+# E2E Testing — pytest + Playwright + BE/DB Verification
 
 ## Three pillars
 
@@ -21,8 +21,8 @@ version: 0.10.0
 ┌─────────────────────────────┐     ws://browser:4444     ┌─────────────────────┐
 │ test-e2e                    │ ────────────────────────▶ │ browser             │
 │ uv image                    │   (Playwright client/srv) │ playwright/python   │
-│ playwright + requests       │                           │ run-server :4444    │
-│ runs your test scripts      │                           │ Chromium + browsers │
+│ pytest + playwright + httpx │                           │ run-server :4444    │
+│ runs pytest test suite      │                           │ Chromium + browsers │
 └─────────────────────────────┘                           └─────────────────────┘
             │                                                       │
             │ requests → BE API (DB content via /api/v1/...)         │
@@ -34,7 +34,7 @@ version: 0.10.0
                                        (mounted as ./.browser/)
 ```
 
-- **test-e2e** runs the test scripts. uv image, no Chromium, just the
+- **test-e2e** runs pytest. uv image, no Chromium, just the
   Playwright Python lib + requests. Connects to the browser container
   by setting `BROWSER_WS=ws://browser:4444` and calling
   `pw.chromium.connect(BROWSER_WS)`.
@@ -43,74 +43,167 @@ version: 0.10.0
   land on the host.
 - Tests live in `./test-e2e/`, bind-mounted at `/scripts` in test-e2e.
 
+## Folder structure
+
+```
+test-e2e/
+├── conftest.py              # shared pytest fixtures
+├── auth/
+│   ├── __init__.py
+│   ├── test_admin_create_user.py
+│   ├── test_admin_only.py
+│   ├── test_me_config_darkmode.py
+│   └── test_me_email_change.py
+├── workspace/
+│   ├── __init__.py
+│   ├── test_create.py
+│   ├── test_delete_cascade.py
+│   ├── test_rename.py
+│   ├── test_member_invite.py
+│   ├── test_member_role.py
+│   └── test_member_remove.py
+├── tables/
+│   ├── __init__.py
+│   ├── test_table_create.py
+│   ├── test_row_create.py
+│   ├── test_row_update.py
+│   ├── test_row_delete.py
+│   ├── test_row_doc_round_trip.py
+│   ├── test_row_filter_json.py
+│   ├── test_column_add.py
+│   ├── test_column_delete.py
+│   ├── test_column_rename.py
+│   ├── test_column_checkbox_type.py
+│   ├── test_column_doc_type.py
+│   ├── test_column_url_type.py
+│   ├── test_column_tags_type.py
+│   ├── test_column_option_add_remove.py
+│   ├── test_column_option_colors.py
+│   ├── test_col_hide.py
+│   ├── test_col_order.py
+│   ├── test_col_resize.py
+│   ├── test_inline_edit.py
+│   ├── test_filter.py
+│   └── test_search.py
+├── table_views/
+│   ├── __init__.py
+│   ├── test_views_create.py
+│   ├── test_views_delete.py
+│   ├── test_views_rename.py
+│   ├── test_views_order.py
+│   ├── test_views_default.py
+│   ├── test_kanban_add_row.py
+│   ├── test_kanban_card_fields.py
+│   ├── test_kanban_drag_card.py
+│   ├── test_kanban_groupby.py
+│   ├── test_timeline_color_by.py
+│   ├── test_timeline_granularity.py
+│   └── test_timeline_groupby.py
+└── template/
+    ├── __init__.py
+    ├── test_pm.py
+    ├── test_crm.py
+    └── test_seo_framework.py
+```
+
 ## One topic per file
 
 **Each test file covers exactly ONE topic.** A "topic" is one
 user-visible behavior that fails or passes as a unit (e.g. *kanban
 group_by persists across navigation*). When the file grows past one
-topic, split it. Naming makes the scope explicit:
+topic, split it.
 
-| Prefix | Scope | Examples |
-|---|---|---|
-| `e2e_test_<feature>.py` | High-level smoke / cross-cutting flow | `e2e_test_auth.py`, `e2e_test_seo_framework.py` |
-| `e2e_test_views_<topic>.py` | Behavior that applies to **all** view types | `e2e_test_views_order.py` (drag-reorder tabs), `e2e_test_views_default.py` (last-clicked sticks), `e2e_test_views_rename.py` |
-| `e2e_test_view_<type>_<topic>.py` | Behavior of **one** view type | `e2e_test_view_kanban_groupby.py`, `e2e_test_view_table_col_order.py`, `e2e_test_view_timeline_drag_resize.py` |
-| `e2e_test_column_<topic>.py` | Column-level, propagates across views | `e2e_test_column_option_colors.py`, `e2e_test_column_rename.py` |
+| Folder | Scope |
+|---|---|
+| `auth/` | Login, admin, user config |
+| `workspace/` | Workspace CRUD + member management |
+| `tables/` | Table create, row CRUD, column CRUD, table-view-specific UI (filter, search, col ops, inline edit) |
+| `table_views/` | Views CRUD (create/delete/rename/order/default), kanban, timeline |
+| `template/` | Template instantiation (PM, CRM, SEO) |
 
-Cross-view tests (`e2e_test_views_*`) MUST exercise the topic on at
+Cross-view tests (`test_views_*`) MUST exercise the topic on at
 least two different view types to prove the persistence is not
-view-type-specific. Per-view tests (`e2e_test_view_<type>_*`) MUST
-also assert a *negative* case where switching to another view (or
+view-type-specific. Per-view tests (`test_kanban_*`, `test_timeline_*`)
+MUST also assert a *negative* case where switching to another view (or
 another table and back) preserves the configured state.
 
 Each file:
-- One scenario, top-to-bottom imperative script.
+- One scenario, top-to-bottom imperative functions.
 - API verify + UI assert on every step (three pillars).
 - < 300 lines. If you're past that, split or factor a helper.
-- Idempotent setup using `bootstrap.py` or its own setup block.
+- Idempotent setup via conftest fixtures.
 
-## Layout
+## conftest.py fixtures
 
+```python
+import pytest, os, requests
+from playwright.sync_api import sync_playwright
+
+BASE_URL = os.environ.get("BASE_URL", "http://lattice-cast")
+BROWSER_WS = os.environ.get("BROWSER_WS", "ws://browser:4444")
+
+@pytest.fixture(scope="session")
+def browser():
+    pw = sync_playwright().start()
+    b = pw.chromium.connect(BROWSER_WS)
+    yield b
+    b.close()
+    pw.stop()
+
+@pytest.fixture
+def page(browser):
+    p = browser.new_page(viewport={"width": 1400, "height": 900})
+    yield p
+    p.close()
+
+@pytest.fixture(scope="session")
+def admin_token():
+    resp = requests.post(f"{BASE_URL}/api/v1/login/password",
+        json={"user_name": "lattice", "password": ""})
+    return resp.json()["access_token"]
+
+@pytest.fixture
+def authed_page(page, admin_token):
+    page.context.add_cookies([{
+        "name": "access_token", "value": admin_token,
+        "domain": "lattice-cast", "path": "/"
+    }])
+    return page
+
+@pytest.fixture
+def workspace(admin_token):
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    resp = requests.post(f"{BASE_URL}/api/v1/workspaces",
+        headers=headers, json={"workspace_name": f"test_ws_{os.getpid()}"})
+    ws = resp.json()
+    yield ws
+    requests.delete(f"{BASE_URL}/api/v1/workspaces/{ws['workspace_id']}",
+        headers=headers)
 ```
-test-e2e/
-├── Dockerfile               # FROM astral-sh/uv; deps from pyproject
-├── pyproject.toml           # playwright + requests, NO browsers
-├── bootstrap.py             # PG INSERT admin + BE create user, idempotent
-├── e2e_helper.py            # E2E ctx: page + paired UI/API asserts
-├── snapshot_decorator.py    # @snapshot opt-in per-step screenshot
-└── e2e_test_<scope>_<topic>.py  # ONE topic per file (see table above)
-```
 
-Run:
+## Running tests
 
 ```bash
 # Bring both containers up:
 docker compose --profile test up -d browser test-e2e
 
-# Execute one test file (or all):
-docker compose exec test-e2e python3 /scripts/e2e_test_<feature>.py [--snapshot]
+# Run entire suite:
+docker compose exec -T test-e2e pytest --tb=short -q
+
+# Run one folder:
+docker compose exec -T test-e2e pytest tables/ -v
+
+# Run one file:
+docker compose exec -T test-e2e pytest table_views/test_kanban_groupby.py -v
+
+# Run with snapshots:
+docker compose exec -T test-e2e pytest --snapshot tables/test_row_create.py
 ```
 
-**Connecting to the remote browser** — every test starts with:
-
-```python
-import os
-from playwright.sync_api import sync_playwright
-
-with sync_playwright() as pw:
-    browser = pw.chromium.connect(os.environ["BROWSER_WS"])
-    page = browser.new_page(viewport={"width": 1400, "height": 900})
-    page.goto(f"{os.environ['BASE_URL']}/login")
-    # … UI action + API verify + UI assert per the three pillars
-    browser.close()
-```
-
-**Debugging a failure**: each test file is one scenario. Re-run that
-single file with `--snapshot` — every decorated step writes a screenshot
-to `.browser/<step_name>.png` (Playwright server writes them through
-the WS, lands on host via the browser container's `/output` mount),
-including the failing step (decorator uses try/finally), so you see
-the full progression up to the break.
+**Debugging a failure**: re-run that single file with `-v --snapshot` —
+every decorated step writes a screenshot to `.browser/<step_name>.png`
+(Playwright server writes them through the WS, lands on host via the
+browser container's `/output` mount).
 
 ## Reference code
 
@@ -241,6 +334,6 @@ If the ticket implies a feature that isn't built yet:
 A passing test against a feature you just invented is worse than no
 test — it ships fake behavior and locks it into the product.
 
-The ticket title is `e2e_test_*` but the *scope* is the whole behavior
+The ticket title is `test_*` but the *scope* is the whole behavior
 the test exercises **that already exists**. Test files are read-only
 mirrors of intent for existing functionality.
