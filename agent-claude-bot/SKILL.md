@@ -283,7 +283,7 @@ tmux kill-session -t "$MONITOR_SESSION" 2>/dev/null
 
 tmux new-session -d -s "$MONITOR_SESSION" -c "$PROJECT_DIR" \
   "while true; do
-     claude -p --dangerously-skip-permissions --model sonnet '
+     claude -p --dangerously-skip-permissions '
        Read tail of .tmp/out/orchestrator.log and worker_1.log.
        Query PM (table_id=$TABLE_ID) for any rn currently in_progress / testing.
        If a worker has 3+ Still working lines on the same step OR status==debugging, FLAG IT.

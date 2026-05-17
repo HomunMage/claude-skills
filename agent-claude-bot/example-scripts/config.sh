@@ -1,0 +1,1 @@
+/home/posetmage/download/github/LatticeCast/.tmp/claude-bot/config.sh

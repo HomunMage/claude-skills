@@ -37,12 +37,12 @@ pm_set_status() {
   [ -z "$ROW_NUMBER" ] || [ -z "$TABLE_ID" ] && return
   local cur
   cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" \
-    -H "Authorization: Bearer claude" | \
+    -H "$LC_AUTH_HEADER" | \
     python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_id']==${ROW_NUMBER}),None); print(json.dumps(r['row_data']) if r else '{}')" 2>/dev/null)
   local updated
   updated=$(echo "$cur" | python3 -c "import sys,json; d=json.load(sys.stdin); d['${STATUS_COL}']='${new_status}'; print(json.dumps(d))")
   curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_NUMBER}" \
-    -H "Authorization: Bearer claude" -H "Content-Type: application/json" \
+    -H "$LC_AUTH_HEADER" -H "Content-Type: application/json" \
     -d "{\"row_data\": ${updated}}" > /dev/null
   log "Status → ${new_status} (row ${ROW_NUMBER})"
 }
@@ -50,7 +50,7 @@ pm_set_status() {
 pm_read_doc() {
   [ -z "$ROW_NUMBER" ] || [ -z "$TABLE_ID" ] && return
   curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_NUMBER}/doc" \
-    -H "Authorization: Bearer claude" 2>/dev/null || echo ""
+    -H "$LC_AUTH_HEADER" 2>/dev/null || echo ""
 }
 
 pm_append_doc() {
@@ -60,11 +60,11 @@ pm_append_doc() {
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   local current
   current=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_NUMBER}/doc" \
-    -H "Authorization: Bearer claude" 2>/dev/null || echo "")
+    -H "$LC_AUTH_HEADER" 2>/dev/null || echo "")
   local updated="${current}
 - ${ts} ${msg}"
   curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_NUMBER}/doc" \
-    -H "Authorization: Bearer claude" -H "Content-Type: text/plain" \
+    -H "$LC_AUTH_HEADER" -H "Content-Type: text/plain" \
     --data-raw "$updated" > /dev/null
 }
 
@@ -85,7 +85,6 @@ step() {
   # detection for 780s of otherwise-wasted budget.
   CLAUDECODE= claude -p \
     --dangerously-skip-permissions \
-    --model sonnet \
     --output-format=stream-json --verbose \
     "${prompt}" 2>&1 \
   | python3 -u "${SCRIPT_DIR}/format_claude_stream.py" \
@@ -231,7 +230,7 @@ while ! mkdir "$GIT_LOCK" 2>/dev/null; do sleep 2; done
 TICKET_TITLE=$(echo "$TASK_DESC" | sed 's/ (row_id=.*//' | cut -c1-72)
 TYPE_COL=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json')).get('Type',''))" 2>/dev/null || echo "")
 TICKET_TYPE=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" \
-  -H "Authorization: Bearer claude" | \
+  -H "$LC_AUTH_HEADER" | \
   python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_id']==${ROW_NUMBER}),None); print(r['row_data'].get('${TYPE_COL}','task') if r else 'task')" 2>/dev/null || echo "task")
 
 git add -A 2>/dev/null || true
