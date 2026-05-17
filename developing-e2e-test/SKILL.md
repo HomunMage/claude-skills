@@ -1,8 +1,8 @@
 ---
 name: developing-e2e-test
-description: End-to-end tests for LatticeCast — pytest + Playwright drives the real browser, every step verifies DB state directly, optional per-step snapshot.
+description: End-to-end tests — pytest + Playwright drives a real browser, every step verifies DB state, optional per-step snapshot.
 user-invocable: false
-version: 0.11.0
+version: 0.12.0
 ---
 
 # E2E Testing — pytest + Playwright + BE/DB Verification
@@ -20,199 +20,64 @@ version: 0.11.0
 ```
 ┌─────────────────────────────┐     ws://browser:4444     ┌─────────────────────┐
 │ test-e2e                    │ ────────────────────────▶ │ browser             │
-│ uv image                    │   (Playwright client/srv) │ playwright/python   │
-│ pytest + playwright + httpx │                           │ run-server :4444    │
-│ runs pytest test suite      │                           │ Chromium + browsers │
+│ pytest + playwright + httpx │   (Playwright client/srv) │ playwright run-srv  │
+│ runs pytest test suite      │                           │ Chromium            │
 └─────────────────────────────┘                           └─────────────────────┘
-            │                                                       │
-            │ requests → BE API (DB content via /api/v1/...)         │
-            ▼                                                       │
-       lattice-cast (nginx)                                          │
-                                                                     │
-                                       page.screenshot(path=…) writes
-                                       on the SERVER side, into /output
-                                       (mounted as ./.browser/)
 ```
 
-- **test-e2e** runs pytest. uv image, no Chromium, just the
-  Playwright Python lib + requests. Connects to the browser container
-  by setting `BROWSER_WS=ws://browser:4444` and calling
-  `pw.chromium.connect(BROWSER_WS)`.
-- **browser** owns Chromium. Boots `playwright run-server --port 4444`
-  and idles. Only mounts `./.browser:/output` so server-side screenshots
-  land on the host.
-- Tests live in `./test-e2e/`, bind-mounted at `/scripts` in test-e2e.
+- **test-e2e** — uv image, no Chromium. Connects via `BROWSER_WS`.
+- **browser** — owns Chromium. Mounts `./.browser:/output` for screenshots.
+- Tests bind-mounted at `/scripts`.
 
-## Folder structure
+## Test organisation
+
+Tests live in **domain folders**, each with `__init__.py`:
 
 ```
 test-e2e/
-├── conftest.py              # shared pytest fixtures
-├── auth/
+├── conftest.py           # shared fixtures
+├── <domain>/             # one folder per domain
 │   ├── __init__.py
-│   ├── test_admin_create_user.py
-│   ├── test_admin_only.py
-│   ├── test_me_config_darkmode.py
-│   └── test_me_email_change.py
-├── workspace/
-│   ├── __init__.py
-│   ├── test_create.py
-│   ├── test_delete_cascade.py
-│   ├── test_rename.py
-│   ├── test_member_invite.py
-│   ├── test_member_role.py
-│   └── test_member_remove.py
-├── tables/
-│   ├── __init__.py
-│   ├── test_table_create.py
-│   ├── test_row_create.py
-│   ├── test_row_update.py
-│   ├── test_row_delete.py
-│   ├── test_row_doc_round_trip.py
-│   ├── test_row_filter_json.py
-│   ├── test_column_add.py
-│   ├── test_column_delete.py
-│   ├── test_column_rename.py
-│   ├── test_column_checkbox_type.py
-│   ├── test_column_doc_type.py
-│   ├── test_column_url_type.py
-│   ├── test_column_tags_type.py
-│   ├── test_column_option_add_remove.py
-│   ├── test_column_option_colors.py
-│   ├── test_col_hide.py
-│   ├── test_col_order.py
-│   ├── test_col_resize.py
-│   ├── test_inline_edit.py
-│   ├── test_filter.py
-│   └── test_search.py
-├── table_views/
-│   ├── __init__.py
-│   ├── test_views_create.py
-│   ├── test_views_delete.py
-│   ├── test_views_rename.py
-│   ├── test_views_order.py
-│   ├── test_views_default.py
-│   ├── test_kanban_add_row.py
-│   ├── test_kanban_card_fields.py
-│   ├── test_kanban_drag_card.py
-│   ├── test_kanban_groupby.py
-│   ├── test_timeline_color_by.py
-│   ├── test_timeline_granularity.py
-│   └── test_timeline_groupby.py
-└── template/
-    ├── __init__.py
-    ├── test_pm.py
-    ├── test_crm.py
-    └── test_seo_framework.py
+│   └── test_<topic>.py   # one topic per file
 ```
 
-## One topic per file
+**One topic per file.** A "topic" is one user-visible behavior that
+fails or passes as a unit. < 300 lines. Split when it grows.
 
-**Each test file covers exactly ONE topic.** A "topic" is one
-user-visible behavior that fails or passes as a unit (e.g. *kanban
-group_by persists across navigation*). When the file grows past one
-topic, split it.
-
-| Folder | Scope |
-|---|---|
-| `auth/` | Login, admin, user config |
-| `workspace/` | Workspace CRUD + member management |
-| `tables/` | Table create, row CRUD, column CRUD, table-view-specific UI (filter, search, col ops, inline edit) |
-| `table_views/` | Views CRUD (create/delete/rename/order/default), kanban, timeline |
-| `template/` | Template instantiation (PM, CRM, SEO) |
-
-Cross-view tests (`test_views_*`) MUST exercise the topic on at
-least two different view types to prove the persistence is not
-view-type-specific. Per-view tests (`test_kanban_*`, `test_timeline_*`)
-MUST also assert a *negative* case where switching to another view (or
-another table and back) preserves the configured state.
-
-Each file:
-- One scenario, top-to-bottom imperative functions.
-- API verify + UI assert on every step (three pillars).
-- < 300 lines. If you're past that, split or factor a helper.
-- Idempotent setup via conftest fixtures.
+Cross-domain tests MUST exercise the topic on at least two view types.
+Per-view tests MUST also assert state persists after navigation away
+and back.
 
 ## conftest.py fixtures
 
-```python
-import pytest, os, requests
-from playwright.sync_api import sync_playwright
+Shared fixtures auto-discovered by pytest:
 
-BASE_URL = os.environ.get("BASE_URL", "http://lattice-cast")
-BROWSER_WS = os.environ.get("BROWSER_WS", "ws://browser:4444")
+- `browser` (session) — connect via `BROWSER_WS`, yield, close
+- `page` (function) — new page per test, auto-close
+- `admin_token` (session) — login, return JWT
+- `authed_page` (function) — page with auth cookie set
+- `workspace` (function) — create temp workspace, yield, delete after
 
-@pytest.fixture(scope="session")
-def browser():
-    pw = sync_playwright().start()
-    b = pw.chromium.connect(BROWSER_WS)
-    yield b
-    b.close()
-    pw.stop()
+Tests declare what they need by parameter name — no manual setup/teardown.
 
-@pytest.fixture
-def page(browser):
-    p = browser.new_page(viewport={"width": 1400, "height": 900})
-    yield p
-    p.close()
-
-@pytest.fixture(scope="session")
-def admin_token():
-    resp = requests.post(f"{BASE_URL}/api/v1/login/password",
-        json={"user_name": "lattice", "password": ""})
-    return resp.json()["access_token"]
-
-@pytest.fixture
-def authed_page(page, admin_token):
-    page.context.add_cookies([{
-        "name": "access_token", "value": admin_token,
-        "domain": "lattice-cast", "path": "/"
-    }])
-    return page
-
-@pytest.fixture
-def workspace(admin_token):
-    headers = {"Authorization": f"Bearer {admin_token}"}
-    resp = requests.post(f"{BASE_URL}/api/v1/workspaces",
-        headers=headers, json={"workspace_name": f"test_ws_{os.getpid()}"})
-    ws = resp.json()
-    yield ws
-    requests.delete(f"{BASE_URL}/api/v1/workspaces/{ws['workspace_id']}",
-        headers=headers)
-```
-
-## Running tests
+## Running
 
 ```bash
-# Bring both containers up:
 docker compose --profile test up -d browser test-e2e
 
-# Run entire suite:
+# full suite
 docker compose exec -T test-e2e pytest --tb=short -q
 
-# Run one folder:
-docker compose exec -T test-e2e pytest tables/ -v
+# one folder
+docker compose exec -T test-e2e pytest <domain>/ -v
 
-# Run one file:
-docker compose exec -T test-e2e pytest table_views/test_kanban_groupby.py -v
-
-# Run with snapshots:
-docker compose exec -T test-e2e pytest --snapshot tables/test_row_create.py
+# one file
+docker compose exec -T test-e2e pytest <domain>/test_<topic>.py -v
 ```
-
-**Debugging a failure**: re-run that single file with `-v --snapshot` —
-every decorated step writes a screenshot to `.browser/<step_name>.png`
-(Playwright server writes them through the WS, lands on host via the
-browser container's `/output` mount).
-
-## Reference code
-
-- [example-scripts/e2e_helper.py](example-scripts/e2e_helper.py) — `E2E` context: `page`, `db`, paired DB / UI asserts.
-- [example-scripts/snapshot_decorator.py](example-scripts/snapshot_decorator.py) — `@snapshot` opt-in screenshot per step.
 
 ## Sub-files (lazy)
 
-- [setup.md](setup.md) — bootstrap test users (PG + BE) before Playwright.
+- [setup.md](setup.md) — bootstrap test users (PG + BE).
 - [flow_template.md](flow_template.md) — canonical test sequence.
 
 ## Rules
@@ -221,119 +86,35 @@ browser container's `/output` mount).
 2. Every DB mutation → UI check. DB row ≠ UI rendered it.
 3. No `sleep()`. Use Playwright `wait_for_*`.
 4. No conditional skipping. Failures must be loud.
-5. Idempotent setup. Re-runs produce same result.
+5. Idempotent setup via conftest fixtures.
 6. `@snapshot` opt-in. Default off (CI stays fast).
 
-## CRITICAL: Tests describe intended behavior — FIX SOURCE, never workaround in test
+## CRITICAL: FIX SOURCE, never workaround in test
 
-The test file encodes the **intended behavior** of the product. If a
-test fails, **the source code is wrong, not the test.** Fix the FE/BE,
-do NOT mutate the test to match buggy behavior.
+The test encodes **intended behavior**. If it fails, **the source is
+wrong, not the test.** Fix the FE/BE, do NOT twist the test.
 
-This is non-negotiable. A test that's been twisted to make a buggy app
-green is worse than no test — it lies about what the product does and
-guarantees the bug ships.
+### Banned patterns
 
-### Banned "workaround" patterns
-
-Every one of these is a red flag that you're papering over a real bug:
-
-| Pattern | What it usually hides | What to do instead |
+| Pattern | Hides | Do instead |
 |---|---|---|
-| `page.wait_for_timeout(N)` | slow / unobservable state change | `page.expect_response("**/api/...")`; or add a `data-status` attr in FE and `wait_for_selector('[data-status="ready"]')` |
-| `time.sleep(N)` | same | same |
-| `try: ... except: pass` (around an assert) | flaky FE / missing testid | fix the FE; never swallow |
-| `if elem.is_visible(): ...` (conditional assert) | the test doesn't actually require it → DELETE it. Otherwise it's a real bug → fix FE | one or the other, never "maybe" |
-| Changing a `[data-testid="X"]` selector to a text-/CSS-based one because the testid is missing | FE forgot the testid | **add the missing testid to the FE component** |
-| Adding `wait_until="networkidle"` AND a follow-up `wait_for_timeout` | hydration race | wait for a real signal (testid, response) |
-| `pytest.skip` / `# TODO` / `# brittle` / `# flaky` | unfixed bug being hidden | open a bug ticket and fix it; do not skip |
+| `wait_for_timeout(N)` / `sleep(N)` | unobservable state | `expect_response()` or `data-status` attr |
+| `try: except: pass` around assert | flaky FE | fix the FE |
+| conditional assert (`if visible`) | maybe-bug | require it or delete it |
+| text/CSS selector replacing missing testid | missing testid | add `data-testid` to FE component |
+| `pytest.skip` / `# flaky` | unfixed bug | open bug ticket, fix it |
 
-`@snapshot` decorator failures and the screenshot helper itself are
-the **only** legitimate uses of `except: pass` — and only around the
-screenshot call, never around an assert.
+### Missing testid = FE bug
 
-### "Hard to test" = FE is not test-friendly = FE bug, not test bug
+If there's no `data-testid` or observable state on the element —
+**add it to the FE component.** That's test-affordance scope, not
+new behavior.
 
-If you find yourself reaching for `wait_for_timeout` or text/CSS
-selectors because there's no `data-testid` or no observable state on
-the element you need — **that is a missing-affordance bug in the FE,
-not a test problem.** The fix is to **add the missing testid / state
-attribute to the FE component**, not to settle for a brittle selector.
+### Scope of test tickets
 
-Concretely, when a needed element is hard to address:
+Allowed: add missing `data-testid`, fix wrong response shapes, expose
+existing state as `data-*` attributes.
 
-- Missing `data-testid` on a button / input / row → add it to the
-  `.svelte` component. Naming: `{component}-{element}` (e.g.
-  `col-drag-handle-{col_id}`). See `developing-svelte` skill for the
-  full Robot Awareness rules.
-- No way to know when a network round-trip finished → either wait on
-  the actual response (`page.expect_response(...)`), or expose a
-  `data-status="ready" / "loading"` attribute in the FE and wait on
-  that.
-- Hydration race / "the page loads but the data appears 300ms later"
-  → expose a `data-hydrated="true"` (or similar) on the root once the
-  initial load is done; wait for that, not a hard sleep.
-
-Adding affordances to make code testable is part of the test ticket's
-scope. Workarounds in the test file are not.
-
-### When the test reveals a real bug
-
-1. Run the test, see it fail.
-2. Read the failure. If the source is wrong (missing testid, broken
-   route, wrong response shape, slow PATCH with no observable signal),
-   **edit the FE/BE source** to fix it.
-3. Re-run the test. If it now passes against the fixed source, commit
-   the FE/BE fix *and* the test together — that's one merged behavior.
-4. If you genuinely can't fix the source in this ticket (e.g. cross-team
-   change), **fail the test loudly**, append the failure to the ticket
-   doc with the proposed source fix, and stop. Do **not** twist the
-   test.
-
-### Things you ARE allowed to touch
-
-When working on an e2e test ticket, "scope" includes **test-affordance
-fixes only** — making existing-but-broken behavior testable:
-
-- `frontend/src/**` — add missing `data-testid` to existing components,
-  fix wrong selectors, expose existing state as `data-*` attributes,
-  fix broken hydration of features that already exist.
-- `backend/src/**` — fix wrong response shape on existing endpoints,
-  fix race conditions on existing endpoints, add `populate_existing` /
-  cache-busting on existing reads.
-- `migration/V*.sql` (forward-only) — only if the source-of-truth
-  schema is wrong for an existing feature; coordinate via skill
-  `developing-db-sql`.
-
-### NEVER add new product behavior
-
-A test ticket lets you **make existing behavior visible to the test**.
-It does **NOT** authorise you to **implement new product behavior**
-that doesn't exist yet — even if the ticket title implies the feature
-should exist.
-
-Concretely, **never**:
-- Add a new BE route or HTTP method that the product doesn't already
-  expose (e.g. don't add `PUT /views/{id}` for "change-view-type" if
-  no such mutation exists today).
-- Add a new FE button, modal, store action, or event handler that
-  triggers behavior the product doesn't already do.
-- Add new fields/columns/state slots that the existing UI doesn't
-  already read or write.
-
-If the ticket implies a feature that isn't built yet:
-
-1. Stop immediately. Do not write the test, do not edit FE/BE.
-2. Append to the ticket doc: `NOT IMPLEMENTED: <feature> does not
-   exist in the product. <one-line rationale>. Either close this
-   ticket or split into (a) a feature ticket for the missing
-   functionality, (b) a test ticket that runs against the new
-   feature once it's merged.`
-3. Exit cleanly (status flips to `debugging` or `review`).
-
-A passing test against a feature you just invented is worse than no
-test — it ships fake behavior and locks it into the product.
-
-The ticket title is `test_*` but the *scope* is the whole behavior
-the test exercises **that already exists**. Test files are read-only
-mirrors of intent for existing functionality.
+**Never:** add new BE routes, new FE buttons/modals, new store actions,
+or new fields that don't already exist. If the feature isn't built,
+stop and flag it — don't invent behavior in a test ticket.
