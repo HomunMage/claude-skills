@@ -149,6 +149,32 @@ wait_finish() {
   while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
     sleep 10; ELAPSED=$((ELAPSED + 10))
 
+    # Every 30s, check if any worker tmux windows still exist — if none, workers died
+    if [ $((ELAPSED % 30)) -eq 0 ]; then
+    local WORKER_WINDOWS
+    WORKER_WINDOWS=$(tmux list-windows -t "${SESSION}" -F '#{window_name}' 2>/dev/null | grep "^w[0-9]" || true)
+    if [ -z "$WORKER_WINDOWS" ]; then
+      log "No worker windows alive — resetting stuck tickets to todo"
+      for rn in $ROW_NUMBERS; do
+        local cur_status
+        cur_status=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" 2>/dev/null | \
+          python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if str(r['row_id'])=='${rn}'),None); print(r['row_data'].get('${SID}','') if r else '')" 2>/dev/null)
+        if [ "$cur_status" = "in_progress" ] || [ "$cur_status" = "testing" ]; then
+          local cur
+          cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" | \
+            python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if str(r['row_id'])=='${rn}'),None); print(json.dumps(r['row_data']) if r else '{}')" 2>/dev/null)
+          local upd
+          upd=$(echo "$cur" | python3 -c "import sys,json; d=json.load(sys.stdin); d['${SID}']='todo'; print(json.dumps(d))")
+          curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" \
+            -H "$AUTH" -H "Content-Type: application/json" \
+            -d "{\"row_data\": ${upd}}" > /dev/null
+          log "Reset rn=${rn} ${cur_status} → todo (worker window gone)"
+        fi
+      done
+      return 0
+    fi
+    fi
+
     local STILL_WORKING
     STILL_WORKING=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" 2>/dev/null | python3 -c "
 import sys, json
