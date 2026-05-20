@@ -2,7 +2,7 @@
 name: agent-claude-bot
 description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.35.1
+version: 0.35.2
 ---
 
 # claude-bot — Autonomous Dev Loop
@@ -30,7 +30,7 @@ Practical sizing rules when filing tickets:
 
 - **One file changed.** If the implementation touches >1 file, the
   description is mixing concerns. Split.
-- **One topic** (for tests this is enforced by `developing-e2e-test`'s
+- **One topic** (for tests this is enforced by `developing-e2e`'s
   one-topic-per-file rule).
 - **<300 lines of new code.** Skim the description: if it sounds like
   "add column type X _and_ wire it through 4 views", that's 5 tickets,
@@ -137,17 +137,17 @@ older UUID `row_id` shape is long gone.**
 ### Step 4T: Test Ticket (title starts with `e2e_test_` or tags include `"test"`)
 Instead of writing application code, write + run one e2e test.
 
-1. Load `Skill(developing-e2e-test)` — follow its two-container
-   architecture (test-e2e runs the script, browser owns Chromium).
+1. Load `Skill(developing-e2e)` — follow its two-container
+   architecture (e2e runs the script, browser owns Chromium).
 2. Parse the test filename from the ticket title (the
    `e2e_test_<scope>_<topic>.py` token).
 3. Bring both services up:
-   `docker compose --profile test up -d browser test-e2e`
-4. Write the test at `test-e2e/<filename>.py`, following the skill's
+   `docker compose --profile test up -d browser e2e`
+4. Write the test at `e2e/<filename>.py`, following the skill's
    "one topic per file" rule and connecting via
    `pw.chromium.connect(os.environ['BROWSER_WS'])`.
 5. Run it:
-   `docker compose exec -T test-e2e python3 /scripts/<filename>.py`
+   `docker compose exec -T e2e python3 /scripts/<filename>.py`
 6. Exit 0 → append `PASS` + any screenshot paths to ticket doc, go to
    Step 5 (commit).
    Non-zero → append stderr to doc, set status to `debugging`, retry
@@ -212,7 +212,7 @@ Worker sets PM status to `done`. Orchestrator polls PM to detect completion — 
 - **Issue branches base off story branch, not main.**
 - **Story branches base off main.**
 - **CRITICAL: Continuously update the ticket doc.** Use `PUT /api/v1/tables/{table_id}/rows/{row_id}/doc` (row_id, NOT row_id). Append timestamped entries after EVERY action. Empty doc after work = FAILED.
-- **CRITICAL: FE changes MUST have `.browser/` snapshot.** Run a Playwright check from `test-e2e` (`docker compose exec -T test-e2e python3 -c "..."` connecting via `BROWSER_WS`) — server-side `page.screenshot(path="/output/...")` lands at `.browser/...` on host. If the snapshot looks wrong, fix before committing.
+- **CRITICAL: FE changes MUST have `.browser/` snapshot.** Run a Playwright check from `e2e` (`docker compose exec -T e2e python3 -c "..."` connecting via `BROWSER_WS`) — server-side `page.screenshot(path="/output/...")` lands at `.browser/...` on host. If the snapshot looks wrong, fix before committing.
 - **API uses row_id (integer) in URL paths**, not row_id (UUID). Example: `PUT /api/v1/tables/{tid}/rows/42` not `PUT /api/v1/rows/{uuid}`.
 - **NEVER POST new rows to update status.** Always use `PUT /api/v1/tables/{table_id}/rows/{row_id}` to update existing row_data. POST creates a NEW row with a new auto-generated Key — this causes duplicate rows (e.g. TO-* mirrors). Workers must ONLY update, never create.
 - **If stuck:** diagnose why, append error + analysis to ticket doc, try different approach. If can't finish in time: commit partial work, log what's done and what's left in doc, set status to `review`, signal DONE. Next worker picks up from where you left off by reading the doc.

@@ -1,8 +1,8 @@
 ---
-name: developing-e2e-test
+name: developing-e2e
 description: End-to-end tests — pytest + Playwright drives a real browser, every step verifies DB state, optional per-step snapshot.
 user-invocable: false
-version: 0.14.0
+version: 0.15.0
 ---
 
 # E2E Testing — pytest + Playwright + BE/DB Verification
@@ -19,13 +19,13 @@ version: 0.14.0
 
 ```
 ┌─────────────────────────────┐     ws://browser:4444     ┌─────────────────────┐
-│ test-e2e                    │ ────────────────────────▶ │ browser             │
+│ e2e                    │ ────────────────────────▶ │ browser             │
 │ pytest + playwright + httpx │   (Playwright client/srv) │ playwright run-srv  │
 │ runs pytest test suite      │                           │ Chromium            │
 └─────────────────────────────┘                           └─────────────────────┘
 ```
 
-- **test-e2e** — uv image, no Chromium. Connects via `BROWSER_WS`.
+- **e2e** — uv image, no Chromium. Connects via `BROWSER_WS`.
 - **browser** — owns Chromium. Mounts `./.browser:/output` for screenshots.
 - Tests bind-mounted at `/scripts`.
 
@@ -34,7 +34,7 @@ version: 0.14.0
 Tests live in **domain folders**, each with `__init__.py`:
 
 ```
-test-e2e/
+e2e/
 ├── conftest.py           # shared fixtures
 ├── e2e_base.py           # utility module (login, api, connect_browser, seed_login_info)
 ├── auth/                 # login, admin, user config
@@ -75,19 +75,19 @@ Utility helpers available via `from e2e_base import BASE, api`:
 ## Running
 
 ```bash
-docker compose --profile test up -d browser test-e2e
+docker compose --profile test up -d browser e2e
 
 # full suite
-docker compose exec -T test-e2e pytest --tb=short -q
+docker compose exec -T e2e pytest --tb=short -q
 
 # one folder
-docker compose exec -T test-e2e pytest <domain>/ -v
+docker compose exec -T e2e pytest <domain>/ -v
 
 # one file
-docker compose exec -T test-e2e pytest <domain>/test_<topic>.py -v
+docker compose exec -T e2e pytest <domain>/test_<topic>.py -v
 
 # with screenshots (saved to .browser/)
-docker compose exec -T test-e2e pytest <domain>/test_<topic>.py -v --snapshot
+docker compose exec -T e2e pytest <domain>/test_<topic>.py -v --snapshot
 ```
 
 ## Sub-files (lazy)
