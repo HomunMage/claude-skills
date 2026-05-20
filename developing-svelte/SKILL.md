@@ -1,7 +1,7 @@
 ---
 name: developing-svelte
-description: Svelte/SvelteKit development — enforce pure TS logic in src/lib/, .svelte files handle UI/UX only. Use when writing Svelte components or SvelteKit routes.
-version: 0.6.0
+description: Svelte/SvelteKit development — enforce pure TS logic in src/lib/, .svelte files handle UI/UX only, stores as SSOT, render via $derived. Use when writing Svelte components or SvelteKit routes.
+version: 0.7.0
 ---
 
 # Svelte Architecture: Logic/UI Separation
@@ -28,6 +28,83 @@ Rules:
 - No Svelte imports in `.ts` files (except `svelte/store` or `$state` runes)
 - All business logic must be testable without Svelte runtime
 - Export clean interfaces — components consume, never define logic
+
+## Stores as SSOT — Derive, Don't Effect
+
+**`*.store.ts` files are the single source of truth. All rendering MUST be `$derived` from stores. Minimize `$effect` usage.**
+
+### The Principle
+
+```
+URL ($page.params) → one $effect fetches data → writes to stores
+stores (SSOT)      → $derived chains compute render data
+template           → binds to $derived values, never reads $page.params directly
+```
+
+### Rules
+
+1. **Stores hold the truth.** `currentWorkspaceId`, `currentTableId`, `columns`, `rows`, `views` — these are SSOT. Components derive from them, never from URL params or local state.
+
+2. **One `$effect` per page for data loading.** Read `$page.params`, fetch data, write results to stores. That's the only legitimate use of `$effect` for data flow.
+
+3. **Everything else is `$derived`.** Column order, filtered rows, grouped rows, render items, active view — all derived from store values. No effects to "sync" derived state.
+
+4. **Template binds to derived/store values.** Use `const tableId = $derived($currentTableId ?? '')` in the script, then `{tableId}` in the template. Never `{$page.params.table_id}` in props.
+
+5. **Mutations go through stores, not effects.** When a user action changes state, call a function that updates the store directly. Don't chain effects to propagate changes.
+
+6. **Guard effects by view type.** Functions like `persistViewConfig` and `applyViewConfig` must early-return for non-applicable view types (e.g. dashboard/kanban). Unguarded effects cause cascading store resets.
+
+7. **Sequential fetch when dependent.** If fetch B needs a result from fetch A (e.g. workspace UUID from `resolveWorkspaceParam` before `fetchTable`), await sequentially. `Promise.all` causes race conditions (422 errors).
+
+### Bad vs Good
+
+```svelte
+<!-- BAD: effect chain syncing derived state -->
+<script>
+  let filtered = $state([]);
+  $effect(() => { filtered = rows.filter(r => r.status === status); });
+  $effect(() => { sorted = filtered.sort(...); });
+</script>
+
+<!-- GOOD: derived chain, no effects -->
+<script>
+  const filtered = $derived(rows.filter(r => r.status === status));
+  const sorted = $derived(filtered.sort(...));
+</script>
+```
+
+```svelte
+<!-- BAD: reading $page.params in template -->
+<Component tableId={$page.params.table_id} />
+
+<!-- GOOD: derived from store -->
+<script>
+  const tableId = $derived($currentTableId ?? '');
+</script>
+<Component {tableId} />
+```
+
+```svelte
+<!-- BAD: Promise.all when B depends on A -->
+const [table] = await Promise.all([
+  fetchTable(id, $page.params.workspace_id),  // workspace might be a name!
+  fetchWorkspaces()
+]);
+
+<!-- GOOD: sequential, resolve first -->
+const wsList = await fetchWorkspaces();
+const wsId = resolveWorkspaceParam(wsParam, wsList);
+const table = await fetchTable(id, wsId ?? undefined);
+```
+
+### URL Rewriting
+
+- Use `history.replaceState` for cosmetic URL changes (UUID → workspace name).
+- **NEVER** use SvelteKit's `replaceState` from `$app/navigation` for cosmetic rewrites — it updates `$page` store, which re-triggers `$effect` loops and causes the app to get stuck.
+- Keep URL rewrite effects in `+layout.svelte` only — don't duplicate in each page.
+
+**Why:** Effects create implicit dependencies and cascade unpredictably. Derived chains are explicit, synchronous, and debuggable. Fewer effects = fewer bugs + better performance.
 
 ## .svelte Files — UI/UX Only
 
