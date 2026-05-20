@@ -1,7 +1,7 @@
 ---
 name: developing-svelte
 description: Svelte/SvelteKit development — enforce pure TS logic in src/lib/, .svelte files handle UI/UX only, stores as SSOT, render via $derived. Use when writing Svelte components or SvelteKit routes.
-version: 0.7.0
+version: 0.8.0
 ---
 
 # Svelte Architecture: Logic/UI Separation
@@ -159,7 +159,24 @@ Rules:
 1. **New feature?** Start with `.ts` in `src/lib/` — types first, then logic
 2. **Need UI?** Create `.svelte` that imports from `src/lib/`
 3. **Refactoring?** Extract any logic from `<script>` blocks into `src/lib/`
-4. **Testing?** Logic tests = pure TS (vitest). UI tests = Playwright snapshot (see below)
+4. **Testing?** Write an e2e test — see below
+
+## Testing: E2E First
+
+**The best way to test FE changes is to write an e2e test and run it.**
+
+Load `Skill(developing-e2e)` for the full guide. Quick summary:
+
+1. Write a test at `e2e/{domain}/test_<topic>.py` — one topic per file, use conftest fixtures
+2. Bring up test containers: `docker compose --profile test up -d browser e2e`
+3. Run the specific test file:
+
+```bash
+docker compose exec -T e2e pytest <domain>/test_<topic>.py -v
+docker compose exec -T e2e pytest <domain>/test_<topic>.py -v --snapshot
+```
+
+Every e2e test must verify **three pillars**: Playwright UI state, BE API response, and (optionally) screenshots. Don't unit-test UI logic in isolation — if it renders in a browser and talks to the real backend, test it end-to-end.
 
 ## MUST: Verify with .browser Snapshot — INSPECT IT, DON'T JUST SAVE IT
 
