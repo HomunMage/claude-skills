@@ -1,165 +1,13 @@
 ---
 name: developing-svelte
-description: Svelte/SvelteKit development — enforce pure TS logic in src/lib/, .svelte files handle UI/UX only, stores as SSOT, render via $derived. Use when writing Svelte components or SvelteKit routes.
-version: 0.8.0
+description: Svelte/SvelteKit development — enforce pure TS logic in src/lib/, .svelte files handle UI/UX only, FE stores are cache of BE SSOT, render via $derived. Use when writing Svelte components or SvelteKit routes.
+version: 0.10.0
 ---
 
 # Svelte Architecture: Logic/UI Separation
 
 **Pure TS in `src/lib/`. Svelte handles UI/UX only.**
 
-## Core Rule
-
-```
-src/lib/           → Pure TypeScript (logic, state, types, utils)
-src/routes/        → .svelte files (UI/UX, layout, routing)
-src/lib/components/ → .svelte files (reusable UI components)
-```
-
-## src/lib/ — Pure TypeScript Layer
-
-- **State** → `src/lib/stores/` — Svelte stores or runes as `.ts` files
-- **Types** → `src/lib/types/` — interfaces, type guards, Zod schemas
-- **Utils** → `src/lib/utils/` — pure functions, helpers, transformations
-- **API** → `src/lib/api/` or `src/lib/server/` — data fetching, server logic
-- **Constants** → `src/lib/constants/` — config, enums, magic values
-
-Rules:
-- No Svelte imports in `.ts` files (except `svelte/store` or `$state` runes)
-- All business logic must be testable without Svelte runtime
-- Export clean interfaces — components consume, never define logic
-
-## Stores as SSOT — Derive, Don't Effect
-
-**`*.store.ts` files are the single source of truth. All rendering MUST be `$derived` from stores. Minimize `$effect` usage.**
-
-### The Principle
-
-```
-URL ($page.params) → one $effect fetches data → writes to stores
-stores (SSOT)      → $derived chains compute render data
-template           → binds to $derived values, never reads $page.params directly
-```
-
-### Rules
-
-1. **Stores hold the truth.** `currentWorkspaceId`, `currentTableId`, `columns`, `rows`, `views` — these are SSOT. Components derive from them, never from URL params or local state.
-
-2. **One `$effect` per page for data loading.** Read `$page.params`, fetch data, write results to stores. That's the only legitimate use of `$effect` for data flow.
-
-3. **Everything else is `$derived`.** Column order, filtered rows, grouped rows, render items, active view — all derived from store values. No effects to "sync" derived state.
-
-4. **Template binds to derived/store values.** Use `const tableId = $derived($currentTableId ?? '')` in the script, then `{tableId}` in the template. Never `{$page.params.table_id}` in props.
-
-5. **Mutations go through stores, not effects.** When a user action changes state, call a function that updates the store directly. Don't chain effects to propagate changes.
-
-6. **Guard effects by view type.** Functions like `persistViewConfig` and `applyViewConfig` must early-return for non-applicable view types (e.g. dashboard/kanban). Unguarded effects cause cascading store resets.
-
-7. **Sequential fetch when dependent.** If fetch B needs a result from fetch A (e.g. workspace UUID from `resolveWorkspaceParam` before `fetchTable`), await sequentially. `Promise.all` causes race conditions (422 errors).
-
-### Bad vs Good
-
-```svelte
-<!-- BAD: effect chain syncing derived state -->
-<script>
-  let filtered = $state([]);
-  $effect(() => { filtered = rows.filter(r => r.status === status); });
-  $effect(() => { sorted = filtered.sort(...); });
-</script>
-
-<!-- GOOD: derived chain, no effects -->
-<script>
-  const filtered = $derived(rows.filter(r => r.status === status));
-  const sorted = $derived(filtered.sort(...));
-</script>
-```
-
-```svelte
-<!-- BAD: reading $page.params in template -->
-<Component tableId={$page.params.table_id} />
-
-<!-- GOOD: derived from store -->
-<script>
-  const tableId = $derived($currentTableId ?? '');
-</script>
-<Component {tableId} />
-```
-
-```svelte
-<!-- BAD: Promise.all when B depends on A -->
-const [table] = await Promise.all([
-  fetchTable(id, $page.params.workspace_id),  // workspace might be a name!
-  fetchWorkspaces()
-]);
-
-<!-- GOOD: sequential, resolve first -->
-const wsList = await fetchWorkspaces();
-const wsId = resolveWorkspaceParam(wsParam, wsList);
-const table = await fetchTable(id, wsId ?? undefined);
-```
-
-### URL Rewriting
-
-- Use `history.replaceState` for cosmetic URL changes (UUID → workspace name).
-- **NEVER** use SvelteKit's `replaceState` from `$app/navigation` for cosmetic rewrites — it updates `$page` store, which re-triggers `$effect` loops and causes the app to get stuck.
-- Keep URL rewrite effects in `+layout.svelte` only — don't duplicate in each page.
-
-**Why:** Effects create implicit dependencies and cascade unpredictably. Derived chains are explicit, synchronous, and debuggable. Fewer effects = fewer bugs + better performance.
-
-## .svelte Files — UI/UX Only
-
-Allowed:
-- Template markup, styling, transitions, animations
-- Import and bind to stores/runes from `src/lib/`
-- Event handling that delegates to imported logic
-- Component composition and slot/snippet patterns
-- `+page.ts` / `+page.server.ts` load functions (these are TS, not .svelte)
-
-Forbidden:
-- Business logic, data transformation, validation inside `<script>`
-- Direct API calls — use `src/lib/api/` or `+page.server.ts`
-- Complex computed values — extract to `src/lib/` as derived store or function
-
-## Pattern: Component + Logic Pair
-
-```
-src/lib/stores/counter.ts    → export const count = writable(0)
-                               export function increment() { count.update(n => n + 1) }
-
-src/lib/components/Counter.svelte → <script>
-                                      import { count, increment } from '$lib/stores/counter'
-                                    </script>
-                                    <button onclick={increment}>{$count}</button>
-```
-
-## Robot Awareness (Playwright-friendly)
-
-All interactive/stateful elements MUST have `data-testid` for Playwright snapshot and automation.
-
-```svelte
-<!-- BAD: no way for Playwright to reliably target -->
-<button onclick={submit}>Save</button>
-<div>{status}</div>
-
-<!-- GOOD: robot-friendly -->
-<button data-testid="save-btn" onclick={submit}>Save</button>
-<div data-testid="status-msg">{status}</div>
-```
-
-Rules:
-- `data-testid` on every: button, link, input, form, modal, toast, dynamic text
-- Naming: `{component}-{element}` — e.g. `login-email-input`, `cart-checkout-btn`
-- Lists: `data-testid="item-{id}"` on each row for individual targeting
-- States: reflect state in DOM — `aria-busy`, `aria-disabled`, `data-status` — so Playwright can `waitForSelector('[data-status="loaded"]')`
-
-**Why:** Playwright snapshots and clicks rely on stable selectors. CSS classes change, text changes with i18n. `data-testid` is the contract between UI and automation.
-
-## When Writing Code
-
-1. **New feature?** Start with `.ts` in `src/lib/` — types first, then logic
-2. **Need UI?** Create `.svelte` that imports from `src/lib/`
-3. **Refactoring?** Extract any logic from `<script>` blocks into `src/lib/`
-4. **Testing?** Write an e2e test — see below
 
 ## Testing: E2E First
 
@@ -177,6 +25,123 @@ docker compose exec -T e2e pytest <domain>/test_<topic>.py -v --snapshot
 ```
 
 Every e2e test must verify **three pillars**: Playwright UI state, BE API response, and (optionally) screenshots. Don't unit-test UI logic in isolation — if it renders in a browser and talks to the real backend, test it end-to-end.
+
+
+## Core Rule
+
+```
+src/lib/           → Pure TypeScript (logic, state, types, utils)
+src/routes/        → .svelte files (UI/UX, layout, routing)
+src/lib/components/ → .svelte files (reusable UI components)
+```
+
+## src/lib/ — Pure TypeScript Layer
+
+- **State** → `src/lib/stores/` — Svelte stores or runes as `.ts` files
+- **Types** → `src/lib/types/` — interfaces, type guards, Zod schemas
+- **Utils** → `src/lib/utils/` — pure functions, helpers, transformations
+- **API** → `src/lib/backend/` — data fetching, server logic
+
+Rules:
+- No Svelte imports in `.ts` files (except `svelte/store` or `$state` runes)
+- All business logic must be testable without Svelte runtime
+- Export clean interfaces — components consume, never define logic
+
+## Data Flow: BE is SSOT, FE is Cache
+
+The Principle
+
+**BE/PG is the single source of truth. FE stores are a local cache of BE state. All rendering MUST be `$derived` from store cache. Minimize `$effect` and local `$state`.**
+
+```
+FE operator -> call BE API lib/backend/*.ts (controller) -> PG (SSOT)  be response → store cache  → $derived chains → renders
+```
+
+FE stores are NOT their own source of truth. They are a **cache** of BE data. The only way to populate or update a store is through `lib/backend/` controller functions that call the BE API and write the response to the store.
+
+
+### Rules
+
+1. **BE is SSOT.** PG holds the truth. FE stores are a cache. Never invent data in FE that didn't come from BE.
+
+2. **`.svelte` files MUST NOT call BE API directly.** No `fetch()`, no `BACKEND_URL`, no HTTP calls in `<script>` blocks. All BE communication goes through `lib/backend/*.ts` controller functions.
+
+3. **Controller functions own the cache update.** `lib/backend/tables.ts::createTable()` calls the BE API, gets the response, then updates the store cache (e.g. calls `initSidebar()` to re-sync). The `.svelte` caller just `await`s and the store reactively updates the UI.
+
+4. **Maximize `$derived`, minimize `$effect` and local `$state`.** Column order, filtered rows, grouped rows, render items, active view — all `$derived` from store cache. Only use `$effect` for genuine side effects (data fetch on route change, localStorage write, URL rewrite).
+
+5. **No duplicate local state.** If sidebar and home page both show workspaces/tables, they both read from the same store — not each maintaining their own copy. One store, many readers.
+
+6. **Mutations: call controller → controller updates cache → UI reacts.** Never manually patch local `$state` arrays after a mutation. The controller calls BE, gets the real response, refreshes the cache.
+
+7. **Sequential fetch when dependent.** If fetch B needs a result from fetch A (e.g. workspace UUID from `resolveWorkspaceParam` before `fetchTable`), await sequentially. `Promise.all` causes race conditions (422 errors).
+
+### Bad vs Good
+
+```ts
+// BAD: .svelte calls BE API directly
+const res = await fetch(`${BACKEND_URL}/api/v1/tables`, { headers });
+const tables = await res.json();
+
+// GOOD: .svelte calls controller, controller handles BE + cache
+import { createTable } from '$lib/backend/tables';
+await createTable({ table_id: name, workspace_id: wsId });
+// store cache already updated by controller — UI reacts
+```
+
+```svelte
+<!-- BAD: local state duplicating store data -->
+<script>
+  let tables = $state<Table[]>([]);
+  let workspaces = $state<Workspace[]>([]);
+  onMount(async () => {
+    workspaces = await fetchWorkspaces();
+    tables = await fetchTables();
+  });
+</script>
+
+<!-- GOOD: read from store cache, one source -->
+<script>
+  import { workspaces, tables } from '$lib/stores/table_schemas.store';
+  // $workspaces and $tables are cache, populated by layout's initSidebar()
+  const activeTables = $derived(
+    $tables.filter(t => t.workspace_id === activeWsId)
+  );
+</script>
+```
+
+```svelte
+<!-- BAD: mutation patches local state -->
+<script>
+  async function handleCreate() {
+    const table = await createTable({ ... });
+    tables = [...tables, table];  // local copy, sidebar doesn't see it
+  }
+</script>
+
+<!-- GOOD: controller updates cache, all readers see it -->
+<script>
+  async function handleCreate() {
+    await createTable({ ... });  // controller calls BE + refreshes store cache
+    // UI auto-updates because store changed
+  }
+</script>
+```
+
+```svelte
+<!-- BAD: effect chain syncing derived state -->
+<script>
+  let filtered = $state([]);
+  $effect(() => { filtered = rows.filter(r => r.status === status); });
+  $effect(() => { sorted = filtered.sort(...); });
+</script>
+
+<!-- GOOD: derived chain, no effects -->
+<script>
+  const filtered = $derived(rows.filter(r => r.status === status));
+  const sorted = $derived(filtered.sort(...));
+</script>
+```
 
 ## MUST: Verify with .browser Snapshot — INSPECT IT, DON'T JUST SAVE IT
 
