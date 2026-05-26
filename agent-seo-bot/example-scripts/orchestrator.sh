@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # seo-bot/orchestrator.sh — Pure shell. Reads source data from
-# a.csv (TAs), b.csv (promotions), c.csv (products); loops the full
+# audiences.csv, promotions.csv, products.csv; loops the full
 # cross product; spawns a fresh claude -p worker for each combination.
 set -uo pipefail
 
@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SEO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck disable=SC1091
 source "${SEO_DIR}/config.sh"
-HELPER="${SEO_DIR}/table_helper.sh"
+source "${SEO_DIR}/lc_api.sh"
 LOG="${SEO_DIR}/.tmp/seo-bot.log"
 mkdir -p "${SEO_DIR}/.tmp"
 : > "$LOG"
@@ -30,20 +30,28 @@ with open(sys.argv[1]) as f:
 " "$1"
 }
 
-mapfile -t A_LINES < <(parse_csv "${SCRIPT_DIR}/a.csv")
-mapfile -t B_LINES < <(parse_csv "${SCRIPT_DIR}/b.csv")
-mapfile -t C_LINES < <(parse_csv "${SCRIPT_DIR}/c.csv")
+mapfile -t A_LINES < <(parse_csv "${SCRIPT_DIR}/audiences.csv")
+mapfile -t B_LINES < <(parse_csv "${SCRIPT_DIR}/promotions.csv")
+mapfile -t C_LINES < <(parse_csv "${SCRIPT_DIR}/products.csv")
 
-log "loaded ${#A_LINES[@]} A (TA), ${#B_LINES[@]} B (promo), ${#C_LINES[@]} C (prod) from CSV"
+log "loaded ${#A_LINES[@]} audiences, ${#B_LINES[@]} promotions, ${#C_LINES[@]} products from CSV"
 EXPECTED=$(( ${#A_LINES[@]} * ${#B_LINES[@]} * ${#C_LINES[@]} ))
 log "full cross product = $EXPECTED combinations"
 
-# Build skip-set from existing articles (if any)
-list_titles() {
-    bash "$HELPER" "$1" list 2>/dev/null \
-      | sed -E 's/^[[:space:]]*[0-9]+[[:space:]]+//; /^$/d; /^\(untitled\)$/d'
-}
-mapfile -t EXISTING < <(list_titles articles)
+: "${ARTICLES_TABLE_ID:?ARTICLES_TABLE_ID must be set in config.sh}"
+: "${TITLE_COLUMN_ID:?TITLE_COLUMN_ID must be set in config.sh}"
+
+# Build skip-set from existing articles
+mapfile -t EXISTING < <(
+    lc_row_list "$ARTICLES_TABLE_ID" 500 2>/dev/null \
+      | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+for r in rows:
+    t = r.get('row_data', {}).get('$TITLE_COLUMN_ID', '')
+    if t: print(t)
+" 2>/dev/null
+)
 log "existing articles: ${#EXISTING[@]}"
 
 contains() {

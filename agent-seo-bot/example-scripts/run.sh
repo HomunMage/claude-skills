@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# seo-bot/run.sh — Entry point. Loops the cross product of
-# TA × promotion × production and spawns a fresh claude -p worker for
-# each missing combination.
+# seo-bot/run.sh — Entry point. Sources config + lc_api, then runs
+# the orchestrator to loop TA × promotion × product cross product.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
