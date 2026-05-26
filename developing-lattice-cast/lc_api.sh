@@ -215,11 +215,11 @@ lc_view_update() {
 lc_view_delete() { _lc_curl DELETE "/tables/$1/views/$2"; }
 
 # lc_schema_patch TID JSON
-#   Body is any subset of {view_order: [int...], default_view: int|null,
+#   Body is any subset of {view_order: [int...], default_view: int,
 #   col_order: [str_column_id...]}. Returns the full TableSchema.
 lc_schema_patch() {
     local body; body=$(_lc_json "$2")
-    _lc_curl PATCH "/tables/$1/schema" "$body" "Content-Type: application/json"
+    _lc_curl PATCH "/tables/$1" "$body" "Content-Type: application/json"
     local rc=$?; rm -f "$body"; return $rc
 }
 

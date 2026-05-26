@@ -1,7 +1,7 @@
 ---
 name: developing-lattice-cast
 description: Thin bash curl wrapper around the LatticeCast HTTP API — one function per route, no domain knowledge, no caching, no magic. Use as the foundation for project-specific tool layers (PM, SEO, dev tracking, etc.). Caller composes lc_api.sh + their own config.sh + domain helpers.
-version: 0.2.0
+version: 0.3.0
 ---
 
 # developing-lattice-cast
@@ -89,9 +89,9 @@ lc_view_delete TID VIEW_ID             → DELETE /tables/{tid}/views/{view_id}
 
 # Schema patch — order / default_view / col_order all live in
 # table_schemas.config; one endpoint, partial body, returns full schema.
-lc_schema_patch TID JSON               → PATCH /tables/{tid}/schema
+lc_schema_patch TID JSON               → PATCH /tables/{tid}
                                           JSON = any subset of
-                                          {view_order:[int…], default_view:int|null,
+                                          {view_order:[int…], default_view:int,
                                            col_order:[col_id…]}
 
 # ── dashboard widget query ───────────────────────────────────────────
