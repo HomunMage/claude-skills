@@ -8,11 +8,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SEO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck disable=SC1091
 source "${SEO_DIR}/config.sh"
-HELPER="${SEO_DIR}/table_helper.sh"
+source "${SEO_DIR}/lc_api.sh"
 
 A_TITLE="${1:?a_title required}";  A_DESC="${2:?a_desc required}"
 B_TITLE="${3:?b_title required}";  B_DESC="${4:?b_desc required}"
 C_TITLE="${5:?c_title required}";  C_DESC="${6:?c_desc required}"
+
+: "${ARTICLES_TABLE_ID:?ARTICLES_TABLE_ID must be set in config.sh}"
+: "${TITLE_COLUMN_ID:?TITLE_COLUMN_ID must be set in config.sh}"
 
 ARTICLE_TITLE="${A_TITLE}-${B_TITLE}-${C_TITLE}"
 ARTICLE_FILE="${SEO_DIR}/.tmp/article-${ARTICLE_TITLE}.md"
@@ -61,8 +64,16 @@ fi
 LEN=$(wc -c < "$ARTICLE_FILE")
 log "article written, ${LEN} bytes"
 
-if ! bash "$HELPER" articles create "$ARTICLE_TITLE" -f "$ARTICLE_FILE" >/dev/null 2>&1; then
-    log "FAIL: upload via table_helper"
+ROW_ID=$(lc_row_create "$ARTICLES_TABLE_ID" \
+    "$(printf '{"row_data":{"%s":"%s"}}' "$TITLE_COLUMN_ID" "$ARTICLE_TITLE")")
+if [ -z "$ROW_ID" ]; then
+    log "FAIL: lc_row_create returned empty row_id"
+    exit 1
+fi
+log "row created, row_id=$ROW_ID"
+
+if ! lc_doc_write "$ARTICLES_TABLE_ID" "$ROW_ID" -f "$ARTICLE_FILE"; then
+    log "FAIL: lc_doc_write"
     exit 1
 fi
 log "uploaded OK"
