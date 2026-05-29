@@ -1,13 +1,13 @@
 ---
 name: agent-assistant
-description: Always-on AI assistant with mission delegation — assistant-main chats, mission-managers load Skill(agent-claude-bot) autonomously, assistant-main-backup handles recovery
+description: Always-on AI assistant with theme delegation — assistant-main chats, theme-managers load Skill(agent-claude-bot) autonomously, assistant-main-backup handles recovery
 argument-hint: start | stop | status
-version: 0.1.0
+version: 0.3.0
 ---
 
 # agent-assistant — Persistent AI Assistant
 
-2 persistent tmux sessions + N mission-manager sessions. All `claude` CLI. Zero API keys.
+2 persistent tmux sessions + N theme-manager sessions. All `claude` CLI. Zero API keys.
 
 ## Architecture
 
@@ -15,20 +15,22 @@ version: 0.1.0
 assistant-main (interactive claude — your chat target)
 ├── assistant-main-backup (interactive claude — backup debug channel)
 │
-├── mission-{slug}-manager (claude, loads Skill(agent-claude-bot))
+├── theme-{THEME}-manager (claude, loads Skill(agent-claude-bot))
 │     └── CBLC orchestrator + workers
 │
-└── mission-{slug2}-manager (parallel goals ok)
+└── theme-{THEME2}-manager (parallel goals ok)
       └── CBLC orchestrator + workers
 ```
+
+Hierarchy: `theme > initiative > epic > story > task > issue`
 
 ## Sessions
 
 | Session | What | How |
 |---------|------|-----|
-| `assistant-main` | Chat target. Takes goals, spawns missions, reports. | Interactive `claude` |
-| `assistant-main-backup` | Debug stuck missions, fix PM state, read logs. | Interactive `claude` |
-| `mission-{slug}-manager` | Autonomous. Loads `Skill(agent-claude-bot)`, runs full plan→running flow. | Interactive `claude` |
+| `assistant-main` | Chat target. Takes themes, spawns theme-managers, reports. | Interactive `claude` |
+| `assistant-main-backup` | Debug stuck themes, fix PM state, read logs. | Interactive `claude` |
+| `theme-{THEME}-manager` | Autonomous. Initiatives several epics, loads `Skill(agent-claude-bot)`. | Interactive `claude` |
 
 ## Start
 
@@ -46,21 +48,21 @@ tmux attach -t assistant-main
 ```
 
 Both sessions auto-load `CLAUDE.md` which loads `Skill(developing*)`. The assistant-main
-session loads this skill (`Skill(agent-assistant)`) to know how to spawn missions.
+session loads this skill (`Skill(agent-assistant)`) to know how to spawn themes.
 
-## Spawn a Mission (from assistant-main)
+## Spawn a Theme (from assistant-main)
 
-When the user gives a goal, assistant-main creates a new tmux session:
+When the user gives a goal, assistant-main spawns a theme-manager that initiatives several epics:
 
 ```bash
-MISSION="google-oauth"  # kebab-case slug
+THEME="google-oauth"  # kebab-case slug
 GOAL="Add Google OAuth login with PKCE to LatticeCast"
 
-tmux new-session -d -s "mission-${MISSION}-manager" -c "$PROJECT_DIR" \
-  "claude --append-system-prompt 'MISSION: ${MISSION}
+tmux new-session -d -s "theme-${THEME}-manager" -c "$PROJECT_DIR" \
+  "claude --append-system-prompt 'THEME: ${THEME}
 GOAL: ${GOAL}
 Load Skill(agent-claude-bot). Execute the full flow:
-1. /agent-claude-bot plan — decompose goal into tickets
+1. /agent-claude-bot plan — initiative the goal into several epics, each epic into stories/tasks
 2. /agent-claude-bot prepare — write config if needed
 3. /agent-claude-bot running — start CBLC workers
 4. Monitor every 2 minutes using ScheduleWakeup(120s)
@@ -68,58 +70,58 @@ Load Skill(agent-claude-bot). Execute the full flow:
 6. When GOAL fully achieved: report DONE and stop monitoring'"
 ```
 
-Tell the user: "Mission `{slug}` started. Attach: `tmux attach -t mission-{slug}-manager`"
+Tell the user: "Theme `{THEME}` started. Attach: `tmux attach -t theme-{THEME}-manager`"
 
 ## Check Status
 
 ```bash
 # List all sessions
-tmux list-sessions 2>/dev/null | grep -E '^(assistant-|mission-)'
+tmux list-sessions 2>/dev/null | grep -E '^(assistant-|theme-)'
 
-# Read mission logs
+# Read theme logs
 tail .tmp/out/orchestrator.log
 tail .tmp/out/worker_*.log
 ```
 
-Or just ask assistant-main: "how's the oauth mission?" — it reads the logs.
+Or just ask assistant-main: "how's the oauth theme?" — it reads the logs.
 
 ## Stop
 
 ```bash
-# One mission
-tmux kill-session -t "mission-{slug}-manager"
+# One theme
+tmux kill-session -t "theme-{THEME}-manager"
 
 # Everything
 tmux kill-session -t assistant-main 2>/dev/null
 tmux kill-session -t assistant-main-backup 2>/dev/null
-tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^mission-' | xargs -I{} tmux kill-session -t {}
+tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^theme-' | xargs -I{} tmux kill-session -t {}
 ```
 
 ## assistant-main Rules
 
 - You are the user's chat interface. Discuss, plan, report.
 - NEVER write application code yourself.
-- NEVER run CBLC directly. Spawn a mission-manager for that.
-- One mission per goal. Name: kebab-case, short.
-- Parallel missions OK if they don't touch overlapping files.
+- NEVER run CBLC directly. Spawn a theme-manager for that.
+- One theme-manager per theme. Name: kebab-case, short.
+- Parallel themes OK if they don't touch overlapping files.
 - If something breaks: tell user to `tmux attach -t assistant-main-backup`.
 
 ## assistant-main-backup Rules
 
 - You are the recovery channel. User comes here when things break.
-- Read worker/mission/orchestrator logs in `.tmp/out/`
+- Read worker/theme/orchestrator logs in `.tmp/out/`
 - Query LC PM directly via curl
 - Fix stuck tickets (PUT status back to todo)
 - Restart workers, resolve merge conflicts
 - Full codebase access — read, edit, test
 
-## mission-manager Rules
+## theme-manager Rules
 
 - You are autonomous. No user interaction needed.
 - Load `Skill(agent-claude-bot)` — it has the full CBLC workflow.
 - Flow:
-  1. **Create PM table** — `POST /api/v1/tables/template/pm` to create a fresh PM table for this mission. Each mission gets its own table, its own TABLE_ID.
-  2. **Plan** — decompose goal into epic/stories/tasks in the new table
+  1. (Optional)**Create PM table** — `POST /api/v1/tables/template/pm` to create a fresh PM table for this theme if necessary. Each theme gets its own table, its own TABLE_ID.
+  2. **Initiative** — decompose goal into several epics, each epic into stories/tasks in the new table
   3. **Prepare** — write `.tmp/claude-bot/config.sh` with the new TABLE_ID
   4. **Running** — start CBLC workers
 - After starting CBLC, monitor via `ScheduleWakeup(120s)`:
