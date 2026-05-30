@@ -112,8 +112,7 @@ tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^theme-' | xargs -I{
 - Parallel themes OK if they don't touch overlapping files.
 - If something breaks: tell user to `tmux attach -t assistant-main-backup`.
 - **Monitoring boundary:** Only monitor theme-manager health (alive / stuck / crashed) every 5 min. Do NOT drill into worker logs, worker progress, or CBLC internals — that is the theme-manager's job.
-
-you prompot theme manager every 2 min monitor if CBLC bot right working.
+- **Chat first, delegate second:** When the user gives a vision/goal, DO NOT immediately spawn a theme-manager or passthrough . you discuss with the theme-manager. You are a manager, not a forwarder.
 
 ## assistant-main-backup Rules
 
