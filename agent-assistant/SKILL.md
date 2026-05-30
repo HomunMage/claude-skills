@@ -1,6 +1,6 @@
 ---
 name: agent-assistant
-description: Always-on AI assistant with theme delegation — assistant-main chats, theme-managers load Skill(agent-claude-bot) autonomously, assistant-main-backup handles recovery
+description: Always-on AI assistant with theme delegation — assistant-main chats, theme-managers autonomously, assistant-main-backup handles recovery
 argument-hint: start | stop | status
 version: 0.3.0
 ---
@@ -8,6 +8,10 @@ version: 0.3.0
 # agent-assistant — Persistent AI Assistant
 
 2 persistent tmux sessions + N theme-manager sessions. All `claude` CLI. Zero API keys.
+
+## skill load rule
+
+if this session is agent-assistant, load this skill high frequently make LLM keep in recent context, not too far.
 
 ## Architecture
 
@@ -23,6 +27,8 @@ assistant-main (interactive claude — your chat target)
 ```
 
 Hierarchy: `theme > initiative > epic > story > task > issue`
+
+多層次操作 就像老闆(我)派提大方向給高管(agent-assistant)  高管才去跟主管(theme-manager ) 提各種季度目標 然後主管派員工(claude-bot) 去做任務
 
 ## Sessions
 
