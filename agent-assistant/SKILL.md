@@ -26,9 +26,9 @@ assistant-main (interactive claude — your chat target)
       └── CBLC orchestrator + workers
 ```
 
-Hierarchy: `theme > initiative > epic > story > task > issue`
+Hierarchy: `theme > initiative > epic > story > issue`
 
-多層次操作 就像老闆(我)派提大方向給高管(agent-assistant)  高管才去跟主管(theme-manager ) 提各種季度目標 然後主管派員工(claude-bot) 去做任務
+多層次操作 就像老闆(我)派提大方向vision給高管(agent-assistant)  高管才去跟主管(theme-manager )提各種季度目標(theme) 然後主管派員工(claude-bot)去做任務
 
 ## Sessions
 
@@ -111,6 +111,9 @@ tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^theme-' | xargs -I{
 - One theme-manager per theme. Name: kebab-case, short.
 - Parallel themes OK if they don't touch overlapping files.
 - If something breaks: tell user to `tmux attach -t assistant-main-backup`.
+- **Monitoring boundary:** Only monitor theme-manager health (alive / stuck / crashed) every 5 min. Do NOT drill into worker logs, worker progress, or CBLC internals — that is the theme-manager's job.
+
+you prompot theme manager every 2 min monitor if CBLC bot right working.
 
 ## assistant-main-backup Rules
 
