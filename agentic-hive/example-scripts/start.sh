@@ -34,9 +34,9 @@ rmdir "${PROJECT_DIR}/_git.lock" 2>/dev/null || true
 
 mkdir -p "${PROJECT_DIR}/.tmp/out"
 
-# Create tmux session with orchestrator in window 0
-tmux new-session -d -s "$SESSION" -n "orchestrator" \
-  "bash ${SCRIPT_DIR}/orchestrator.sh '${PROJECT_DIR}' ${MAX_CYCLES} ${NUM_WORKERS}; echo 'Orchestrator ended. Press enter.'; read"
+# Create tmux session with queen in window 0
+tmux new-session -d -s "$SESSION" -n "queen" \
+  "bash ${SCRIPT_DIR}/queen.sh '${PROJECT_DIR}' ${MAX_CYCLES} ${NUM_WORKERS}; echo 'Queen ended. Press enter.'; read"
 
 echo "========================================="
 echo " ${SESSION} started"
@@ -50,10 +50,10 @@ echo " Max cycles:    ${MAX_CYCLES}"
 echo " Workers:       ${NUM_WORKERS}"
 echo ""
 echo " Window layout:"
-echo "   0: orchestrator — task planner + coordinator"
-echo "   1-${NUM_WORKERS}: workers — each in its own tmux window"
+echo "   0: queen — task planner + coordinator"
+echo "   1-${NUM_WORKERS}: bees — each in its own tmux window"
 echo ""
 echo " Logs:"
-echo "   ${PROJECT_DIR}/.tmp/out/orchestrator.log"
+echo "   ${PROJECT_DIR}/.tmp/out/queen.log"
 echo "   ${PROJECT_DIR}/.tmp/out/worker_1.log .. worker_${NUM_WORKERS}.log"
 echo ""

@@ -1,16 +1,17 @@
 #!/bin/bash
-# worker.sh — Sequential pipeline: each step is a fresh claude -p call
-# Usage: bash worker.sh <project_dir> <worker_id> [task_description]
+# bee.sh — Sequential pipeline: each step is a fresh llm_run call
+# Usage: bash bee.sh <project_dir> <worker_id> [task_description]
 
 set -euo pipefail
 
 # shellcheck disable=SC1091
-# Self-source config.sh — workers spawn in tmux windows that may not inherit
-# env from the orchestrator (existing tmux server case).
+# Self-source config.sh — bees spawn in tmux windows that may not inherit
+# env from the queen (existing tmux server case).
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/config.sh"
+source "${SCRIPT_DIR}/llm.sh"
 
-PROJECT_DIR="${1:?Usage: worker.sh <project_dir> <worker_id> [task_description]}"
+PROJECT_DIR="${1:?Usage: bee.sh <project_dir> <worker_id> [task_description]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 WORKER_ID="${2:?Worker ID required}"
 TASK_DESC="${3:-}"
@@ -30,7 +31,7 @@ log() {
 }
 
 # ─── PM helpers (pure bash, no LLM) ─────────────────────────────────────────
-STATUS_COL=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json')).get('Status',''))" 2>/dev/null || echo "")
+STATUS_COL=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/agentic-hive/_col_cache.json')).get('Status',''))" 2>/dev/null || echo "")
 
 pm_set_status() {
   local new_status="$1"
@@ -72,23 +73,17 @@ step() {
   local step_name="$1"
   local prompt="$2"
   log "Step: ${step_name}..."
-  # stream-json + verbose = live event stream (thinking, tool_use,
-  # tool_result, final result). format_claude_stream.py renders each
-  # event as one human-readable line so `tmux attach` shows progress
-  # in real time instead of waiting for the final blob.
+  # llm_run (llm.sh) streams progress lines from the configured
+  # LLM_BACKEND into $LOG_FILE — see llm.sh for the claude/codex/hermes
+  # dispatch. Swapping backends never requires touching this file.
   #
-  # Watchdog: claude -p has been observed to hang silently after a few
+  # Watchdog: the backend has been observed to hang silently after a few
   # minutes (Agent/Explore sub-agent stall or API hangup that doesn't
   # surface in the pipe). Sample the log file every 30s; kill the
   # process if it hasn't grown for 120s. ERR trap then flips the row
-  # to `debugging` and the orchestrator advances — trading 120s
-  # detection for 780s of otherwise-wasted budget.
-  CLAUDECODE= claude -p \
-    --dangerously-skip-permissions \
-    --output-format=stream-json --verbose \
-    "${prompt}" 2>&1 \
-  | python3 -u "${SCRIPT_DIR}/format_claude_stream.py" \
-  | tee -a "$LOG_FILE" &
+  # to `debugging` and the queen advances — trading 120s detection for
+  # 780s of otherwise-wasted budget.
+  llm_run "${prompt}" "$LOG_FILE" &
   local pipe_pid=$!
 
   (
@@ -100,7 +95,9 @@ step() {
       if [ "$cur" -eq "$last" ]; then
         stuck=$((stuck + 30))
         if [ "$stuck" -ge 120 ]; then
-          log "Watchdog: no log growth for 120s — killing claude -p"
+          log "Watchdog: no log growth for 120s — killing ${LLM_BACKEND} backend"
+          # NB: pkill pattern is claude-specific. Update it (or the whole
+          # watchdog kill step) if you implement a non-claude LLM_BACKEND.
           pkill -TERM -P $$ -f "claude -p" 2>/dev/null || true
           sleep 2
           pkill -KILL -P $$ -f "claude -p" 2>/dev/null || true
@@ -228,7 +225,7 @@ pm_set_status "review"
 while ! mkdir "$GIT_LOCK" 2>/dev/null; do sleep 2; done
 
 TICKET_TITLE=$(echo "$TASK_DESC" | sed 's/ (row_id=.*//' | cut -c1-72)
-TYPE_COL=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json')).get('Type',''))" 2>/dev/null || echo "")
+TYPE_COL=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/agentic-hive/_col_cache.json')).get('Type',''))" 2>/dev/null || echo "")
 TICKET_TYPE=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" \
   -H "$LC_AUTH_HEADER" | \
   python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_id']==${ROW_NUMBER}),None); print(r['row_data'].get('${TYPE_COL}','task') if r else 'task')" 2>/dev/null || echo "task")

@@ -5,7 +5,7 @@ Reads one JSON event per line on stdin, emits a single human-readable
 line per event so `tail -F` and `tmux attach` show real-time progress
 instead of one opaque blob at the end of a slow LLM call.
 
-Copy this into the project's `.tmp/claude-bot/` next to worker.sh.
+Copy this into the project's `.tmp/agentic-hive/` next to bee.sh.
 """
 import json
 import sys

@@ -1,7 +1,7 @@
 ---
 name: agent-claude-skills-guideline
 description: Guide for creating Claude Code skills (SKILL.md). Use when building, structuring, or debugging custom skills/slash commands.
-version: 0.5.0
+version: 0.5.1
 ---
 
 # Skills = Library Dependencies
@@ -23,9 +23,9 @@ developing-programming/        # lib with 3 modules
 ├── developing.md              # impl: test/format/lint/commit steps
 └── writelog.md                # impl: changelog/version logic
 
-agent-claude-bot/              # lib with sub-packages
-├── SKILL.md                   # public API: bot overview + rules
-├── plan/                      # sub-package: planning phase
+agentic-hive/                  # lib with sub-packages
+├── SKILL.md                   # public API: hive overview + rules
+├── plan.md                    # sub-package: planning phase
 └── example-scripts/           # sub-package: reference scripts
 
 developing-project-management/ # lib with lazy deps

@@ -34,7 +34,7 @@ PM_USER="${PM_USER:-claude}"
 PM_PASS="${PM_PASS:-}"
 TABLE_ID="${TABLE_ID:-pm}"
 PROJECT_DIR="${PROJECT_DIR:-$PWD}"
-PM_CACHE_DIR="${PROJECT_DIR}/.tmp/claude-bot"
+PM_CACHE_DIR="${PROJECT_DIR}/.tmp/agentic-hive"
 TOKEN_CACHE="${PM_CACHE_DIR}/_pm_token"
 COL_CACHE="${PM_CACHE_DIR}/_col_cache.json"
 

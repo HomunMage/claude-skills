@@ -3,15 +3,15 @@
 ## Start
 
 ```bash
-bash .tmp/claude-bot/run.sh          # 1 worker, 50 cycles
-bash .tmp/claude-bot/run.sh 50 2     # 2 workers, 50 cycles
+bash .tmp/agentic-hive/run.sh          # 1 bee, 50 cycles
+bash .tmp/agentic-hive/run.sh 50 2     # 2 bees, 50 cycles
 ```
 
 ## Monitor — REQUIRED, every 3 minutes
 
-**After starting the bot, immediately arm a Monitor that polls every 180 s.**
-Without it, you have no way to detect when the orchestrator self-exits, a
-worker hangs, or the API goes 500. This is mandatory, not optional.
+**After starting the hive, immediately arm a Monitor that polls every 180 s.**
+Without it, you have no way to detect when the queen self-exits, a
+bee hangs, or the API goes 500. This is mandatory, not optional.
 
 Use Claude Code's `Monitor` tool (NOT a sleep loop, NOT `/loop`) — it streams
 one event per tick straight into the chat:
@@ -21,10 +21,10 @@ Monitor(
   command:
     'cd <project>; while true; do
        TS=$(date "+%H:%M:%S")
-       ORCH=$(pgrep -f "orchestrator.sh" | head -1)
+       ORCH=$(pgrep -f "queen.sh" | head -1)
        WORKERS=$(tmux list-windows -t LatticeCast-bot 2>/dev/null \
          | grep -cE "^[0-9]+: w[0-9]+-")
-       LAST=$(tail -1 .tmp/out/orchestrator.log 2>/dev/null \
+       LAST=$(tail -1 .tmp/out/queen.log 2>/dev/null \
          | sed "s/^[0-9:]* \[ORCH\] //" | head -c 100)
        STATS=$(curl -s "$LC_API/tables/$TABLE_ID/rows?limit=200" \
          -H "$LC_AUTH_HEADER" 2>/dev/null \
@@ -52,10 +52,10 @@ Each tick yields one line like:
 `16:08:21 [ok] orch=2022352 w=1 | done=7 in_progress=1 | Still working: [10] (180s)`
 
 Flag and act on:
-- `ORCH_DEAD` — orchestrator exited; check log, restart if needed.
+- `ORCH_DEAD` — queen exited; check log, restart if needed.
 - `ALERT` — log contains TIMEOUT/FAILED/ERROR; investigate.
 - `API_ERROR` for ≥2 ticks — backend is 500ing; check `docker compose logs backend`.
-- Tickets stuck in `testing` longer than 30 min — worker hung; reap.
+- Tickets stuck in `testing` longer than 30 min — bee hung; reap.
 
 `TaskStop` the Monitor when the run is finished.
 
@@ -70,22 +70,22 @@ Tmux windows: `0:orch  1:w1-task-182  2:w2-bug-45`
 ## Stop
 
 ```bash
-bash .tmp/claude-bot/stop.sh
+bash .tmp/agentic-hive/stop.sh
 ```
 
 Or from inside tmux: `Ctrl-B` then `:kill-session`
 
 ## Recovery
 
-On startup, orchestrator auto-recovers orphaned tickets:
-- If `in_progress` tickets exist but no tmux worker window matches → reset to `todo`
-- Worker's partial code stays in git working tree — next worker reads it and continues
+On startup, queen auto-recovers orphaned tickets:
+- If `in_progress` tickets exist but no tmux bee window matches → reset to `todo`
+- Bee's partial code stays in git working tree — next bee reads it and continues
 
 ## Logs
 
 ```
 .tmp/out/
-├── orchestrator.log
+├── queen.log
 ├── worker_1.log
 └── worker_2.log
 ```

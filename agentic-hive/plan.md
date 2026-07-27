@@ -2,7 +2,7 @@
 
 This is Phase 1 of the two-phase workflow:
 1. **Planning** (this) — Interactive with user: discuss, design, produce tickets
-2. **`/claude-bot`** — Autonomous: execute the tickets via LatticeCast PM
+2. **`/agentic-hive`** — Autonomous: execute the tickets via LatticeCast PM
 
 ## Your Job
 
@@ -83,11 +83,11 @@ Rules:
 ### Title vs Doc Rule
 - **Title is SHORT** — one line summary, max 80 chars. Example: `Add OAuth middleware`
 - **Doc has ALL the detail** — implementation instructions, files to change, decisions, acceptance criteria
-- Title is what you see in table view. Doc is what the worker reads before coding.
+- Title is what you see in table view. Doc is what the bee reads before coding.
 - **Every ticket MUST have a non-empty doc.** Empty doc = planning failure.
 
 ### Ticket Size Rules
-- Each issue must be **completable in <15 minutes** by a Claude Sonnet worker
+- Each issue must be **completable in <15 minutes** by a Claude Sonnet bee
 - Each issue must be **independently testable** — tests must pass after each issue
 - Each issue must be **independently committable** — clean git commit after each
 - Issues should **not conflict** — two workers shouldn't edit the same file
@@ -198,14 +198,14 @@ After user approves, use `Skill(developing-project-management)`:
    **CRITICAL**: Every ticket MUST have non-empty doc content after planning. Empty docs = planning failure.
 
 7. **Delete design docs** `.tmp/llm*.md` — content now lives in ticket docs
-8. Report: **"Created N tickets in LatticeCast. Ready to start `/claude-bot`?"**
+8. Report: **"Created N tickets in LatticeCast. Ready to start `/agentic-hive`?"**
 
 ## Step 7: Generate Runner Scripts
 
-Design and write custom runner scripts in `.tmp/claude-bot/` tailored to the project.
+Design and write custom runner scripts in `.tmp/agentic-hive/` tailored to the project.
 
 Reference [example-scripts/](../example-scripts/) for patterns.
 
 ```bash
-bash .tmp/claude-bot/start.sh
+bash .tmp/agentic-hive/start.sh
 ```

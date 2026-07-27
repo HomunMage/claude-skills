@@ -2,7 +2,7 @@
 name: agent-seo-bot
 description: Cross-product SEO article generator. Reads 3 CSVs (TA × promotion × product), loops the full Cartesian product, and spawns one fresh `claude -p` worker per article. Saves to LatticeCast articles table via lc_api.sh.
 argument-hint: run | status
-version: 0.2.0
+version: 0.2.1
 ---
 
 # seo-bot — Cross-Product Article Generator
@@ -11,7 +11,7 @@ Spawns N×M×K fresh `claude -p` workers, one per (TA × promo × product)
 combo. Each worker writes one article in isolation; the orchestrator
 just loops + uploads via `lc_api.sh`.
 
-## Architecture (same shape as `agent-claude-bot`)
+## Architecture (same shape as `agentic-hive`)
 
 ```
 Project root (e.g. seo-system/)
@@ -86,7 +86,7 @@ update orchestrator's `contains` skip-check.
 - **First line is `# <title>`.**
 - **No filler / no echoing the prompt.**
 - **Don't curl from inside the worker** — bash handles upload via
-  `lc_row_create` + `lc_doc_write`. Same rule as `agent-claude-bot`.
+  `lc_row_create` + `lc_doc_write`. Same rule as `agentic-hive`.
 
 ## Rate limit
 

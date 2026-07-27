@@ -1,30 +1,30 @@
 ---
-name: agent-claude-bot
-description: Start the autonomous multi-agent dev loop — orchestrator + workers in tmux solving tickets from LatticeCast PM
+name: agentic-hive
+description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.35.3
+version: 0.36.0
 ---
 
-# claude-bot — Autonomous Dev Loop
+# agentic-hive — Autonomous Dev Loop
 
-Start a tmux-based orchestrator that runs N workers in parallel to solve project tickets autonomously.
+Start a tmux-based queen that runs N bees in parallel to solve project tickets autonomously.
 
 ## Flow
 
 ```
-1. User calls /claude-bot plan
+1. User calls /agentic-hive plan
 2. Planning: discuss design → write .tmp/llm.design.*.md for review
 3. User approves → create tickets in LatticeCast PM
-5. User approve start workers
-6. Workers: query PM → pick todo ticket → worktree branch → implement → update status → merge
+5. User approve start bees
+6. Bees: query PM → pick todo ticket → worktree branch → implement → update status → merge
 ```
 
 ## Ticket Sizing — 900s Hard Cap
 
-Every worker has a **900-second wall clock** before the orchestrator
+Every bee has a **900-second wall clock** before the queen
 gives up on it and kills the tmux window. This is non-negotiable —
 don't raise it. If a ticket can't be completed in 15 minutes of
-worker time, **the ticket is too big — split it before opening**.
+bee time, **the ticket is too big — split it before opening**.
 
 Practical sizing rules when filing tickets:
 
@@ -40,9 +40,9 @@ Practical sizing rules when filing tickets:
   warm-up alone.
 
 Signals you went too big:
-- Orchestrator log shows `Still working: [N] (900s)` → `TIMEOUT after
+- Queen log shows `Still working: [N] (900s)` → `TIMEOUT after
   900s` → ticket should be split.
-- Worker hits `debugging` 3+ times — usually means the ticket
+- Bee hits `debugging` 3+ times — usually means the ticket
   description doesn't constrain the surface area enough.
 
 Recovery from a TIMEOUT: see "Recovery rule" below.
@@ -71,9 +71,9 @@ main
     └── issue/{issue-N-slug}    ← branched from story branch
 ```
 
-**Workers only implement issues.** Stories are never directly coded — they are merged into main automatically once all their issues are done.
+**Bees only implement issues.** Stories are never directly coded — they are merged into main automatically once all their issues are done.
 
-## Worker Workflow
+## Bee Workflow
 
 ### On Start — Read These First
 
@@ -108,11 +108,11 @@ git checkout -b "$STORY_BRANCH" 2>/dev/null || git checkout "$STORY_BRANCH"
 STORY_BRANCH="story/<story-key-lowercase>"
 TICKET_KEY="<issue-key>"  # e.g. L-13
 SLUG="issue/${TICKET_KEY}/$(echo '<short-description>' | tr ' ' '-')"
-git worktree add .tmp/worker_{id} -b "$SLUG" "$STORY_BRANCH"
-cd .tmp/worker_{id}
+git worktree add .tmp/bee_{id} -b "$SLUG" "$STORY_BRANCH"
+cd .tmp/bee_{id}
 ```
 
-Each worker operates in its own worktree — no conflicts.
+Each bee operates in its own worktree — no conflicts.
 
 ### Step 3: Pick Ticket → update status → READ DOC FIRST
 - Query LatticeCast PM for `todo` issues (type=task or type=bug)
@@ -120,7 +120,7 @@ Each worker operates in its own worktree — no conflicts.
 - **READ THE DOC FIRST** via `GET /api/v1/tables/{table_id}/rows/{row_id}/doc`
   - The doc has ALL implementation detail — what to do, which files, decisions, acceptance criteria
   - Title is just a short summary — **doc is the real spec**
-  - If a previous worker attempted this ticket, the doc has their work log + what's left
+  - If a previous bee attempted this ticket, the doc has their work log + what's left
   - **Follow the doc instructions, not just the title**
 - Append to doc: `- {timestamp} Picked up by W{id}`
 - Work on ONLY that ticket
@@ -151,7 +151,7 @@ Instead of writing application code, write + run one e2e test.
 6. Exit 0 → append `PASS` + any screenshot paths to ticket doc, go to
    Step 5 (commit).
    Non-zero → append stderr to doc, set status to `debugging`, retry
-   (max 3 attempts per Worker Rules).
+   (max 3 attempts per Bee Rules).
 
 ### Step 4: Implement — MUST update doc continuously
 - Make the smallest possible change to complete the ticket
@@ -176,7 +176,7 @@ Use `Skill(developing-programming)` workflow:
 cd <project-root>
 git checkout "$STORY_BRANCH"
 git merge "$SLUG"                      # merge issue into story branch
-git worktree remove .tmp/worker_{id}
+git worktree remove .tmp/bee_{id}
 git branch -d "$SLUG"
 ```
 
@@ -198,9 +198,9 @@ git branch -d "$STORY_BRANCH"
 If siblings are **not all merged**, leave the story branch open.
 
 ### Step 8: Done
-Worker sets PM status to `done`. Orchestrator polls PM to detect completion — no trigger files needed.
+Bee sets PM status to `done`. Queen polls PM to detect completion — no trigger files needed.
 
-## Worker Rules
+## Bee Rules
 
 - **ONE ticket per session.** Do not batch multiple tickets.
 - **Never ask questions.** Make reasonable decisions and document them in the commit message.
@@ -214,51 +214,59 @@ Worker sets PM status to `done`. Orchestrator polls PM to detect completion — 
 - **CRITICAL: Continuously update the ticket doc.** Use `PUT /api/v1/tables/{table_id}/rows/{row_id}/doc` (row_id, NOT row_id). Append timestamped entries after EVERY action. Empty doc after work = FAILED.
 - **CRITICAL: FE changes MUST have `.browser/` snapshot.** Run a Playwright check from `e2e` (`docker compose exec -T e2e python3 -c "..."` connecting via `BROWSER_WS`) — server-side `page.screenshot(path="/output/...")` lands at `.browser/...` on host. If the snapshot looks wrong, fix before committing.
 - **API uses row_id (integer) in URL paths**, not row_id (UUID). Example: `PUT /api/v1/tables/{tid}/rows/42` not `PUT /api/v1/rows/{uuid}`.
-- **NEVER POST new rows to update status.** Always use `PUT /api/v1/tables/{table_id}/rows/{row_id}` to update existing row_data. POST creates a NEW row with a new auto-generated Key — this causes duplicate rows (e.g. TO-* mirrors). Workers must ONLY update, never create.
-- **If stuck:** diagnose why, append error + analysis to ticket doc, try different approach. If can't finish in time: commit partial work, log what's done and what's left in doc, set status to `review`, signal DONE. Next worker picks up from where you left off by reading the doc.
+- **NEVER POST new rows to update status.** Always use `PUT /api/v1/tables/{table_id}/rows/{row_id}` to update existing row_data. POST creates a NEW row with a new auto-generated Key — this causes duplicate rows (e.g. TO-* mirrors). Bees must ONLY update, never create.
+- **If stuck:** diagnose why, append error + analysis to ticket doc, try different approach. If can't finish in time: commit partial work, log what's done and what's left in doc, set status to `review`, signal DONE. Next bee picks up from where you left off by reading the doc.
 
-## Live worker progress (stream-json + formatter)
+## Live bee progress (llm.sh + formatter)
 
-Workers call `claude -p --output-format=stream-json --verbose` and pipe
-through `example-scripts/format_claude_stream.py`. Every event the LLM
-emits — thinking blocks, tool calls, tool results, the final cost —
-gets rendered as one short line. So when you `tmux attach -t <session>`
-and switch into a worker window, you see the bot's progress in real
-time instead of waiting for one giant blob at the end of a slow call.
+Bees don't call an LLM CLI directly — `bee.sh`'s `step()` calls
+`llm_run` from `example-scripts/llm.sh`, which dispatches on
+`$LLM_BACKEND` (default `claude`) and streams progress lines back into
+the step's log file. Swapping the backend (codex, hermes, ...) means
+editing `llm.sh` only — `queen.sh` and `bee.sh` never change.
+
+The `claude` backend calls `claude -p --output-format=stream-json
+--verbose` and pipes through `example-scripts/format_claude_stream.py`.
+Every event the LLM emits — thinking blocks, tool calls, tool results,
+the final cost — gets rendered as one short line. So when you `tmux
+attach -t <session>` and switch into a bee window, you see the hive's
+progress in real time instead of waiting for one giant blob at the end
+of a slow call.
 
 `claude -p` alone streams the final text only. `--verbose` alone does
 nothing for tool-less prompts. The pair `--output-format=stream-json
 --verbose` (with `format_claude_stream.py` to format it) is the only
-combination that exposes the full inner loop.
+combination that exposes the full inner loop. A non-claude backend
+needs its own equivalent formatter if it wants the same live view.
 
-### Watchdog: kill claude-p if log goes silent
+### Watchdog: kill the backend if log goes silent
 
-`claude -p` has been observed to hang silently after a few minutes —
-usually after spawning an `Agent`/`Explore` sub-agent or a long-running
-tool call. The subprocess stays alive but the stream-json pipe stops
-emitting events; without a guard the ticket burns the full 900s budget
-waiting.
+The `claude` backend has been observed to hang silently after a few
+minutes — usually after spawning an `Agent`/`Explore` sub-agent or a
+long-running tool call. The subprocess stays alive but the stream-json
+pipe stops emitting events; without a guard the ticket burns the full
+900s budget waiting.
 
-The `example-scripts/worker.sh` `step()` function wraps the pipeline
-with a watchdog that samples the log file every 30s and kills
-`claude -p` if it hasn't grown for 120s. When it fires, the pipeline
-exits non-zero → ERR trap flips the row to `debugging` → orchestrator
-advances. 120s detection traded for 780s of otherwise-wasted budget.
+The `example-scripts/bee.sh` `step()` function wraps `llm_run` with a
+watchdog that samples the log file every 30s and kills the backend
+process if it hasn't grown for 120s. When it fires, `llm_run` returns
+non-zero → ERR trap flips the row to `debugging` → queen advances.
+120s detection traded for 780s of otherwise-wasted budget.
 
 ## 3 Phases
 
 | Phase | Doc | What |
 |-------|-----|------|
 | **Plan** | [plan.md](plan.md) | Discuss design → create tickets in LatticeCast PM |
-| **Prepare** | [prepare.md](prepare.md) | Write project's `.tmp/claude-bot/config.sh` + scripts that source the skill |
+| **Prepare** | [prepare.md](prepare.md) | Write project's `.tmp/agentic-hive/config.sh` + scripts that source the skill |
 | **Run** | [running.md](running.md) | `bash run.sh`, `tmux attach`, `stop.sh`, recovery |
 
 ## Monitoring — main Claude opens a sibling `<project>-monitor` tmux
 
-**The bot itself does not self-supervise.** Whenever you (the main Claude
-session, not a worker) call `bash run.sh`, you ALSO spawn a sibling tmux
+**The hive itself does not self-supervise.** Whenever you (the main Claude
+session, not a bee) call `bash run.sh`, you ALSO spawn a sibling tmux
 session that runs an independent monitoring loop. That loop polls every
-~3 minutes and reports whether the bot is making progress.
+~3 minutes and reports whether the hive is making progress.
 
 Two equivalent ways to spawn the monitor — pick one based on how you
 want results delivered:
@@ -266,10 +274,10 @@ want results delivered:
 ### Option A — `ScheduleWakeup` from the main Claude session (simplest)
 
 The main Claude session calls `ScheduleWakeup` with `delaySeconds=180`
-and a self-replicating `prompt:` that re-checks `.tmp/out/orchestrator.log`,
-the worker log, and PM status, then re-schedules itself. Uses no tmux —
+and a self-replicating `prompt:` that re-checks `.tmp/out/queen.log`,
+the bee log, and PM status, then re-schedules itself. Uses no tmux —
 the monitor lives entirely in the main session's wake cycle. Stops when
-orchestrator says `ALL DONE!`.
+queen says `ALL DONE!`.
 
 Pros: no extra processes; reports inline in your conversation.
 Cons: ties up the main session's wake budget.
@@ -277,19 +285,19 @@ Cons: ties up the main session's wake budget.
 ### Option B — separate `<project>-monitor` tmux running `claude -p`
 
 ```bash
-PROJECT="$(basename "$PROJECT_DIR")"  # same as the bot's session name
+PROJECT="$(basename "$PROJECT_DIR")"  # same as the hive's session name
 MONITOR_SESSION="${PROJECT}-monitor"
 tmux kill-session -t "$MONITOR_SESSION" 2>/dev/null
 
 tmux new-session -d -s "$MONITOR_SESSION" -c "$PROJECT_DIR" \
   "while true; do
      claude -p --dangerously-skip-permissions '
-       Read tail of .tmp/out/orchestrator.log and worker_1.log.
+       Read tail of .tmp/out/queen.log and worker_1.log.
        Query PM (table_id=$TABLE_ID) for any rn currently in_progress / testing.
-       If a worker has 3+ Still working lines on the same step OR status==debugging, FLAG IT.
+       If a bee has 3+ Still working lines on the same step OR status==debugging, FLAG IT.
        Run git log --oneline -3 — if a TIMEOUTed ticket has a matching commit, mark its PM status done.
        Print one short paragraph: ticket, step, elapsed seconds.
-       If orchestrator log ends with ALL DONE, print STOP_MONITOR and exit.
+       If queen log ends with ALL DONE, print STOP_MONITOR and exit.
      '
      grep -q STOP_MONITOR <<<\"$(tail -1 .tmp/out/monitor.log)\" && break
      sleep 180
@@ -304,13 +312,13 @@ Cons: extra tmux + a `claude -p` instance every 3 min.
 | Signal | What it means | Action |
 |--------|---------------|--------|
 | `3+ Still working` lines on the same step | LLM iterating on lint/test or stuck | flag, keep watching |
-| Worker step `debugging` | tests failed | flag, escalate after 2 cycles |
-| `TIMEOUT` in orchestrator log | 900s budget hit | check `git log` — if commit landed, mark PM `done` manually |
-| `ALL DONE!` and queue empty | bot finished | print summary table, stop the monitor |
+| Bee step `debugging` | tests failed | flag, escalate after 2 cycles |
+| `TIMEOUT` in queen log | 900s budget hit | check `git log` — if commit landed, mark PM `done` manually |
+| `ALL DONE!` and queue empty | hive finished | print summary table, stop the monitor |
 
 ### Recovery rule (TIMEOUT after commit)
 
-The orchestrator times out workers at 900s. If the worker had already
+The queen times out bees at 900s. If the bee had already
 committed before the timeout, PM status will be stuck at `testing`/`review`
 even though the work is in `main`. The monitor MUST verify with
 `git log --oneline -5` and PUT the ticket to `done` so the next cycle
@@ -319,7 +327,7 @@ doesn't reprocess it.
 ### When NOT to spawn the monitor
 
 - Single-ticket runs you're attaching to interactively.
-- Dry-runs / debugging the bot scripts themselves.
+- Dry-runs / debugging the hive scripts themselves.
 
 ## Key Dependencies
 
@@ -331,11 +339,11 @@ doesn't reprocess it.
 
 ## Composition pattern
 
-Every project that uses the bot writes its own `.tmp/claude-bot/config.sh`
-and the bot's local scripts source it + the skill's `pm_tool.sh`:
+Every project that uses the hive writes its own `.tmp/agentic-hive/config.sh`
+and the hive's local scripts source it + the skill's `pm_tool.sh`:
 
 ```bash
-# .tmp/claude-bot/config.sh — per-project values only
+# .tmp/agentic-hive/config.sh — per-project values only
 export LC_API="http://localhost:13491/api/v1"
 export LC_AUTH_HEADER="Authorization: Bearer claude"
 export PM_USER="claude"
@@ -344,7 +352,7 @@ export WORKSPACE_ID="<uuid>"
 export PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export SKILLS_DIR="${PROJECT_DIR}/.claude/skills"
 
-# orchestrator.sh / worker.sh
+# queen.sh / bee.sh
 source "${SCRIPT_DIR}/config.sh"
 source "${SKILLS_DIR}/developing-project-management/pm_tool.sh"
 # pm_*, lc_* are now available
@@ -356,6 +364,7 @@ source "${SKILLS_DIR}/developing-project-management/pm_tool.sh"
 
 | Script | Role |
 |--------|------|
-| orchestrator.sh | Pure rule-based: query PM → spawn → poll → cleanup |
-| worker.sh | Bash infra + LLM code: `source pm_tool.sh` for PM ops |
+| queen.sh | Pure rule-based: query PM → spawn → poll → cleanup |
+| bee.sh | Bash infra + LLM code: `source pm_tool.sh` for PM ops |
+| llm.sh | Swappable LLM backend: `llm_run` dispatches on `$LLM_BACKEND` (claude / codex / hermes) |
 | start.sh / stop.sh | tmux session lifecycle |

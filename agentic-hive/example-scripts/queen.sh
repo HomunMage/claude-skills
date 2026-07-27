@@ -1,5 +1,5 @@
 #!/bin/bash
-# orchestrator.sh — pure rule-based, NO LLM
+# queen.sh — pure rule-based, NO LLM
 #
 # PSEUDO CODE:
 #   startup:
@@ -23,17 +23,17 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck disable=SC1091
-# Sourcing config.sh here makes orchestrator.sh self-sufficient regardless of
+# Sourcing config.sh here makes queen.sh self-sufficient regardless of
 # whether it inherits env from start.sh. Critical when tmux new-session
 # attaches to an already-running tmux server whose env predates this run.
 source "${SCRIPT_DIR}/config.sh"
 
-PROJECT_DIR="${1:?Usage: orchestrator.sh <project_dir> [max_cycles] [num_workers]}"
+PROJECT_DIR="${1:?Usage: queen.sh <project_dir> [max_cycles] [num_workers]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 MAX_CYCLES="${2:-50}"
 NUM_WORKERS="${3:-1}"
 SESSION="$(basename "$PROJECT_DIR")"
-LOG_FILE="${PROJECT_DIR}/.tmp/out/orchestrator.log"
+LOG_FILE="${PROJECT_DIR}/.tmp/out/queen.log"
 CYCLE=0
 
 PM_URL="${LC_API%/api/v1}"
@@ -48,14 +48,14 @@ log() { echo "$(date '+%H:%M:%S') [ORCH] $1" | tee -a "$LOG_FILE"; }
 curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}" -H "$AUTH" 2>/dev/null | python3 -c "
 import sys, json
 t = json.load(sys.stdin)
-json.dump({c['name']: c['column_id'] for c in t['columns']}, open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json', 'w'))
+json.dump({c['name']: c['column_id'] for c in t['columns']}, open('${PROJECT_DIR}/.tmp/agentic-hive/_col_cache.json', 'w'))
 " 2>/dev/null
 
 # ─── Recovery: reset orphaned in_progress tickets ─────────────────────────────
 # If tmux has no worker window for a ticket → it's orphaned (bot crashed) → reset to todo
 # Human in_progress tickets are safe — humans don't use tmux windows named w{N}
 recover_orphans() {
-  local SID; SID=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/claude-bot/_col_cache.json')).get('Status',''))" 2>/dev/null)
+  local SID; SID=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/agentic-hive/_col_cache.json')).get('Status',''))" 2>/dev/null)
   [ -z "$SID" ] && return
 
   # Get all in_progress tickets
@@ -131,7 +131,7 @@ spawn_worker() {
   local TTYPE=$(echo "$TASK" | head -c 20 | tr ' ' '-' | tr -cd 'a-z0-9-')
   log "Spawn W${WID}: ${TASK}"
   tmux new-window -t "${SESSION}" -n "w${WID}-${TTYPE}-${RN}" \
-    "TABLE_ID='${TABLE_ID}' bash ${SCRIPT_DIR}/worker.sh '${PROJECT_DIR}' ${WID} '${SAFE_TASK}' 2>&1 | tee -a ${PROJECT_DIR}/.tmp/out/worker_${WID}_${RN}.log"
+    "TABLE_ID='${TABLE_ID}' bash ${SCRIPT_DIR}/bee.sh '${PROJECT_DIR}' ${WID} '${SAFE_TASK}' 2>&1 | tee -a ${PROJECT_DIR}/.tmp/out/worker_${WID}_${RN}.log"
 }
 
 # ─── Step 4: Wait for ALL workers to FINISH ───────────────────────────────────
