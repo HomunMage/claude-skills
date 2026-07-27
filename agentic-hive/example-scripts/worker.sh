@@ -1,7 +1,7 @@
 #!/bin/bash
-# llm.sh — swappable LLM backend for bee.sh
+# worker.sh — swappable LLM backend for bee.sh
 #
-# Exposes one function: llm_run <prompt> <log_file>
+# Exposes one function: work <prompt> <log_file>
 #   - Runs the configured backend on <prompt>.
 #   - Streams human-readable progress lines to stdout, which the caller
 #     tees into <log_file> (so `tmux attach` shows live progress).
@@ -15,7 +15,7 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LLM_BACKEND="${LLM_BACKEND:-claude}"
 
-llm_run() {
+work() {
   local prompt="$1"
   local log_file="$2"
 
@@ -38,20 +38,20 @@ llm_run() {
       # Stub: wire up `codex exec` (or equivalent) here. Keep the same
       # contract — write progress lines to stdout/$log_file, return the
       # backend's real exit code so the watchdog/ERR trap still work.
-      echo "llm.sh: LLM_BACKEND=codex has no implementation yet — add one in ${BASH_SOURCE[0]}" \
+      echo "worker.sh: LLM_BACKEND=codex has no implementation yet — add one in ${BASH_SOURCE[0]}" \
         | tee -a "$log_file" >&2
       return 1
       ;;
 
     hermes)
       # Stub: same contract as above, for a Hermes-compatible CLI/API.
-      echo "llm.sh: LLM_BACKEND=hermes has no implementation yet — add one in ${BASH_SOURCE[0]}" \
+      echo "worker.sh: LLM_BACKEND=hermes has no implementation yet — add one in ${BASH_SOURCE[0]}" \
         | tee -a "$log_file" >&2
       return 1
       ;;
 
     *)
-      echo "llm.sh: unknown LLM_BACKEND='${LLM_BACKEND}' (known: claude, codex, hermes)" >&2
+      echo "worker.sh: unknown LLM_BACKEND='${LLM_BACKEND}' (known: claude, codex, hermes)" >&2
       return 1
       ;;
   esac

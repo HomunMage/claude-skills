@@ -2,7 +2,7 @@
 name: agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.36.0
+version: 0.36.1
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -217,13 +217,13 @@ Bee sets PM status to `done`. Queen polls PM to detect completion — no trigger
 - **NEVER POST new rows to update status.** Always use `PUT /api/v1/tables/{table_id}/rows/{row_id}` to update existing row_data. POST creates a NEW row with a new auto-generated Key — this causes duplicate rows (e.g. TO-* mirrors). Bees must ONLY update, never create.
 - **If stuck:** diagnose why, append error + analysis to ticket doc, try different approach. If can't finish in time: commit partial work, log what's done and what's left in doc, set status to `review`, signal DONE. Next bee picks up from where you left off by reading the doc.
 
-## Live bee progress (llm.sh + formatter)
+## Live bee progress (worker.sh + formatter)
 
 Bees don't call an LLM CLI directly — `bee.sh`'s `step()` calls
-`llm_run` from `example-scripts/llm.sh`, which dispatches on
+`work()` from `example-scripts/worker.sh`, which dispatches on
 `$LLM_BACKEND` (default `claude`) and streams progress lines back into
 the step's log file. Swapping the backend (codex, hermes, ...) means
-editing `llm.sh` only — `queen.sh` and `bee.sh` never change.
+editing `worker.sh` only — `queen.sh` and `bee.sh` never change.
 
 The `claude` backend calls `claude -p --output-format=stream-json
 --verbose` and pipes through `example-scripts/format_claude_stream.py`.
@@ -247,9 +247,9 @@ long-running tool call. The subprocess stays alive but the stream-json
 pipe stops emitting events; without a guard the ticket burns the full
 900s budget waiting.
 
-The `example-scripts/bee.sh` `step()` function wraps `llm_run` with a
+The `example-scripts/bee.sh` `step()` function wraps `work()` with a
 watchdog that samples the log file every 30s and kills the backend
-process if it hasn't grown for 120s. When it fires, `llm_run` returns
+process if it hasn't grown for 120s. When it fires, `work()` returns
 non-zero → ERR trap flips the row to `debugging` → queen advances.
 120s detection traded for 780s of otherwise-wasted budget.
 
@@ -366,5 +366,5 @@ source "${SKILLS_DIR}/developing-project-management/pm_tool.sh"
 |--------|------|
 | queen.sh | Pure rule-based: query PM → spawn → poll → cleanup |
 | bee.sh | Bash infra + LLM code: `source pm_tool.sh` for PM ops |
-| llm.sh | Swappable LLM backend: `llm_run` dispatches on `$LLM_BACKEND` (claude / codex / hermes) |
+| worker.sh | Swappable LLM backend: `work()` dispatches on `$LLM_BACKEND` (claude / codex / hermes) |
 | start.sh / stop.sh | tmux session lifecycle |

@@ -1,5 +1,5 @@
 #!/bin/bash
-# bee.sh — Sequential pipeline: each step is a fresh llm_run call
+# bee.sh — Sequential pipeline: each step is a fresh work() call
 # Usage: bash bee.sh <project_dir> <worker_id> [task_description]
 
 set -euo pipefail
@@ -9,7 +9,7 @@ set -euo pipefail
 # env from the queen (existing tmux server case).
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/config.sh"
-source "${SCRIPT_DIR}/llm.sh"
+source "${SCRIPT_DIR}/worker.sh"
 
 PROJECT_DIR="${1:?Usage: bee.sh <project_dir> <worker_id> [task_description]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
@@ -73,8 +73,8 @@ step() {
   local step_name="$1"
   local prompt="$2"
   log "Step: ${step_name}..."
-  # llm_run (llm.sh) streams progress lines from the configured
-  # LLM_BACKEND into $LOG_FILE — see llm.sh for the claude/codex/hermes
+  # work() (worker.sh) streams progress lines from the configured
+  # LLM_BACKEND into $LOG_FILE — see worker.sh for the claude/codex/hermes
   # dispatch. Swapping backends never requires touching this file.
   #
   # Watchdog: the backend has been observed to hang silently after a few
@@ -83,7 +83,7 @@ step() {
   # process if it hasn't grown for 120s. ERR trap then flips the row
   # to `debugging` and the queen advances — trading 120s detection for
   # 780s of otherwise-wasted budget.
-  llm_run "${prompt}" "$LOG_FILE" &
+  work "${prompt}" "$LOG_FILE" &
   local pipe_pid=$!
 
   (

@@ -37,12 +37,12 @@ Read the example scripts in `.claude/skills/agentic-hive/example-scripts/` to un
 - Build context from CLAUDE.md, README.md, skills, ticket doc
 - Pipeline: implement → test → commit → done
 - PM status updates via bash helpers (never LLM)
-- Sources `llm.sh` for the actual LLM call — don't inline `claude -p` here
+- Sources `worker.sh` for the actual LLM call — don't inline `claude -p` here
 
-### 2f. `llm.sh` + `format_claude_stream.py` — copy, don't rewrite
+### 2f. `worker.sh` + `format_claude_stream.py` — copy, don't rewrite
 Unlike the other scripts, these two are copied as-is from
-`example-scripts/` (only edit `llm.sh` if you're adding a non-claude
-`LLM_BACKEND` branch). `llm.sh` exposes `llm_run` for `bee.sh`'s
+`example-scripts/` (only edit `worker.sh` if you're adding a non-claude
+`LLM_BACKEND` branch). `worker.sh` exposes `work()` for `bee.sh`'s
 `step()`; `format_claude_stream.py` renders the claude backend's
 stream-json events into log lines.
 
@@ -91,7 +91,7 @@ When writing scripts, tailor these to the specific project:
 ├── stop.sh                 ← kill session
 ├── queen.sh                ← pure rule-based task dispatch
 ├── bee.sh                  ← bash infra + LLM code
-├── llm.sh                  ← swappable LLM backend (llm_run)
+├── worker.sh                  ← swappable LLM backend (work())
 └── format_claude_stream.py ← claude backend's stream-json formatter
 ```
 

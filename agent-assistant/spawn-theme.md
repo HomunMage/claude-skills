@@ -89,7 +89,7 @@ tmux attach -t assistant-main
 
 ```
 agent-assistant (this skill)
-  └── agentic-hive (queen, bees, llm.sh backend, plan/prepare/running)
+  └── agentic-hive (queen, bees, worker.sh backend, plan/prepare/running)
         └── developing-project-management (pm_tool.sh)
               └── developing-lattice-cast (lc_api.sh)
         └── developing-programming (test/format/lint)
