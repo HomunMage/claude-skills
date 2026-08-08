@@ -21,9 +21,9 @@ if ! curl -s http://localhost:13491/api/v1/status 2>/dev/null | grep -q '"ok"'; 
   exit 1
 fi
 
-if [ ! -f "${PROJECT_DIR}/CLAUDE.md" ]; then
-  echo "WARNING: ${PROJECT_DIR}/CLAUDE.md not found."
-  echo "Consider copying the template: cp CLAUDE.md ${PROJECT_DIR}/"
+if [ ! -f "${PROJECT_DIR}/AGENTS.md" ] && [ ! -f "${PROJECT_DIR}/CLAUDE.md" ]; then
+  echo "WARNING: neither ${PROJECT_DIR}/AGENTS.md nor CLAUDE.md was found."
+  echo "Add agent instructions before starting autonomous workers."
 fi
 
 # Kill existing session if any

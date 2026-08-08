@@ -1,5 +1,5 @@
 #!/bin/bash
-# bee.sh — Sequential pipeline: each step is a fresh work() call
+# bee.sh — Sequential pipeline: each step is a fresh provider-neutral work() call
 # Usage: bash bee.sh <project_dir> <worker_id> [task_description]
 
 set -euo pipefail
@@ -73,9 +73,9 @@ step() {
   local step_name="$1"
   local prompt="$2"
   log "Step: ${step_name}..."
-  # work() (worker.sh) streams progress lines from the configured
-  # LLM_BACKEND into $LOG_FILE — see worker.sh for the claude/codex/hermes
-  # dispatch. Swapping backends never requires touching this file.
+  # work() (worker.sh) delegates to llm.sh, which streams progress from the
+  # configured LLM_PROVIDER into $LOG_FILE. Provider changes do not touch
+  # this orchestration layer.
   #
   # Watchdog: the backend has been observed to hang silently after a few
   # minutes (Agent/Explore sub-agent stall or API hangup that doesn't
@@ -95,12 +95,10 @@ step() {
       if [ "$cur" -eq "$last" ]; then
         stuck=$((stuck + 30))
         if [ "$stuck" -ge 120 ]; then
-          log "Watchdog: no log growth for 120s — killing ${LLM_BACKEND} backend"
-          # NB: pkill pattern is claude-specific. Update it (or the whole
-          # watchdog kill step) if you implement a non-claude LLM_BACKEND.
-          pkill -TERM -P $$ -f "claude -p" 2>/dev/null || true
+          log "Watchdog: no log growth for 120s — killing ${LLM_PROVIDER} provider"
+          work_stop "$pipe_pid" TERM
           sleep 2
-          pkill -KILL -P $$ -f "claude -p" 2>/dev/null || true
+          work_stop "$pipe_pid" KILL
           break
         fi
       else
@@ -111,8 +109,11 @@ step() {
   ) &
   local watchdog_pid=$!
 
-  wait "$pipe_pid" 2>/dev/null
+  local work_status=0
+  wait "$pipe_pid" 2>/dev/null || work_status=$?
   kill "$watchdog_pid" 2>/dev/null || true
+  wait "$watchdog_pid" 2>/dev/null || true
+  return "$work_status"
 }
 
 # If any step fails, signal BLOCKED and exit
@@ -148,7 +149,7 @@ pm_append_doc "Picked up by W${WORKER_ID}"
 # ─── Phase 4: Build context ─────────────────────────────────────────────────
 CONTEXT=""
 
-for f in CLAUDE.md README.md; do
+for f in AGENTS.md CLAUDE.md README.md; do
   [ -f "${PROJECT_DIR}/${f}" ] && CONTEXT="${CONTEXT}
 --- ${f} ---
 $(head -200 "${PROJECT_DIR}/${f}")

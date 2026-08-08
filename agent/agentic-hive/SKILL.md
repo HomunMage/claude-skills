@@ -2,7 +2,7 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.37.0
+version: 0.38.0
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -217,13 +217,21 @@ Bee sets PM status to `done`. Queen polls PM to detect completion — no trigger
 - **NEVER POST new rows to update status.** Always use `PUT /api/v1/tables/{table_id}/rows/{row_id}` to update existing row_data. POST creates a NEW row with a new auto-generated Key — this causes duplicate rows (e.g. TO-* mirrors). Bees must ONLY update, never create.
 - **If stuck:** diagnose why, append error + analysis to ticket doc, try different approach. If can't finish in time: commit partial work, log what's done and what's left in doc, set status to `review`, signal DONE. Next bee picks up from where you left off by reading the doc.
 
-## Live bee progress (worker.sh + formatter)
+## Provider-neutral LLM workers (`worker.sh` + `llm.sh`)
 
 Bees don't call an LLM CLI directly — `bee.sh`'s `step()` calls
-`work()` from `example-scripts/worker.sh`, which dispatches on
-`$LLM_BACKEND` (default `claude`) and streams progress lines back into
-the step's log file. Swapping the backend (codex, hermes, ...) means
-editing `worker.sh` only — `queen.sh` and `bee.sh` never change.
+`work()` from `example-scripts/worker.sh`. That thin ticket-work layer
+delegates to `llm_run()` in `example-scripts/llm.sh`, which selects
+`$LLM_PROVIDER` (`claude` by default, or `codex`) and streams progress
+lines back into the step's log file. `$LLM_BACKEND` remains a backwards-
+compatible alias. Adding another CLI provider changes `llm.sh` and its
+formatter only — `queen.sh`, `bee.sh`, and `worker.sh` stay unchanged.
+
+The abstraction is:
+
+```text
+bee.sh step() → worker.sh work() → llm.sh llm_run() → Claude or Codex CLI
+```
 
 The `claude` backend calls `claude -p --output-format=stream-json
 --verbose` and pipes through `example-scripts/format_claude_stream.py`.
@@ -236,20 +244,35 @@ of a slow call.
 `claude -p` alone streams the final text only. `--verbose` alone does
 nothing for tool-less prompts. The pair `--output-format=stream-json
 --verbose` (with `format_claude_stream.py` to format it) is the only
-combination that exposes the full inner loop. A non-claude backend
-needs its own equivalent formatter if it wants the same live view.
+combination that exposes the full inner loop. A non-Claude provider
+needs its own equivalent formatter to preserve the same live view.
 
-### Watchdog: kill the backend if log goes silent
+The `codex` provider sends the prompt on stdin to `codex exec --json
+--ephemeral --dangerously-bypass-approvals-and-sandbox`, pins execution
+to `$LLM_PROJECT_DIR`, and pipes JSONL through
+`example-scripts/format_codex_stream.py`. Select it with:
 
-The `claude` backend has been observed to hang silently after a few
+```bash
+export LLM_PROVIDER=codex
+# export CODEX_MODEL=gpt-5.6-codex  # optional
+```
+
+Both adapters pass prompts over stdin, preserve the actual provider exit
+code through the formatting pipeline, and support `LLM_DRY_RUN=1` for
+command-construction checks without starting a model run.
+
+### Watchdog: kill the provider if log goes silent
+
+An LLM provider can hang silently after a few
 minutes — usually after spawning an `Agent`/`Explore` sub-agent or a
-long-running tool call. The subprocess stays alive but the stream-json
+long-running tool call. The subprocess stays alive but the event
 pipe stops emitting events; without a guard the ticket burns the full
 900s budget waiting.
 
 The `example-scripts/bee.sh` `step()` function wraps `work()` with a
-watchdog that samples the log file every 30s and kills the backend
-process if it hasn't grown for 120s. When it fires, `work()` returns
+watchdog that samples the log file every 30s and calls the provider-neutral
+`work_stop()`/`llm_stop()` interface if it hasn't grown for 120s. When it
+fires, `work()` returns
 non-zero → ERR trap flips the row to `debugging` → queen advances.
 120s detection traded for 780s of otherwise-wasted budget.
 
@@ -261,51 +284,47 @@ non-zero → ERR trap flips the row to `debugging` → queen advances.
 | **Prepare** | [prepare.md](prepare.md) | Write project's `.tmp/agentic-hive/config.sh` + scripts that source the skill |
 | **Run** | [running.md](running.md) | `bash run.sh`, `tmux attach`, `stop.sh`, recovery |
 
-## Monitoring — main Claude opens a sibling `<project>-monitor` tmux
+## Monitoring — the supervising agent opens a sibling monitor
 
-**The hive itself does not self-supervise.** Whenever you (the main Claude
-session, not a bee) call `bash run.sh`, you ALSO spawn a sibling tmux
-session that runs an independent monitoring loop. That loop polls every
-~3 minutes and reports whether the hive is making progress.
+**The hive itself does not self-supervise.** Whenever the supervising
+agent (not a bee) calls `bash run.sh`, it ALSO starts an independent
+monitoring loop. That loop polls every ~3 minutes and reports whether the
+hive is making progress.
 
 Two equivalent ways to spawn the monitor — pick one based on how you
 want results delivered:
 
-### Option A — `ScheduleWakeup` from the main Claude session (simplest)
+### Option A — use the host agent's scheduler (simplest)
 
-The main Claude session calls `ScheduleWakeup` with `delaySeconds=180`
-and a self-replicating `prompt:` that re-checks `.tmp/out/queen.log`,
-the bee log, and PM status, then re-schedules itself. Uses no tmux —
-the monitor lives entirely in the main session's wake cycle. Stops when
-queen says `ALL DONE!`.
+If the host agent supports scheduled wakeups, schedule a check every 180
+seconds that reads `.tmp/out/queen.log`, the bee logs, and PM status, then
+re-schedules itself. Stop when queen says `ALL DONE!`.
 
 Pros: no extra processes; reports inline in your conversation.
 Cons: ties up the main session's wake budget.
 
-### Option B — separate `<project>-monitor` tmux running `claude -p`
+### Option B — separate `<project>-monitor` tmux using `llm.sh`
+
+Write a small project-local `monitor.sh` that sources the same config and
+provider adapter as the bees. Its core loop is provider-neutral:
 
 ```bash
-PROJECT="$(basename "$PROJECT_DIR")"  # same as the hive's session name
-MONITOR_SESSION="${PROJECT}-monitor"
-tmux kill-session -t "$MONITOR_SESSION" 2>/dev/null
+source "${SCRIPT_DIR}/config.sh"
+source "${SCRIPT_DIR}/llm.sh"
 
-tmux new-session -d -s "$MONITOR_SESSION" -c "$PROJECT_DIR" \
-  "while true; do
-     claude -p --dangerously-skip-permissions '
-       Read tail of .tmp/out/queen.log and worker_1.log.
-       Query PM (table_id=$TABLE_ID) for any rn currently in_progress / testing.
-       If a bee has 3+ Still working lines on the same step OR status==debugging, FLAG IT.
-       Run git log --oneline -3 — if a TIMEOUTed ticket has a matching commit, mark its PM status done.
-       Print one short paragraph: ticket, step, elapsed seconds.
-       If queen log ends with ALL DONE, print STOP_MONITOR and exit.
-     '
-     grep -q STOP_MONITOR <<<\"$(tail -1 .tmp/out/monitor.log)\" && break
-     sleep 180
-   done | tee -a .tmp/out/monitor.log"
+MONITOR_LOG="${PROJECT_DIR}/.tmp/out/monitor.log"
+MONITOR_PROMPT="Read the queen and worker logs and PM status. Report ticket,
+step, and elapsed time. If the queue is finished, print STOP_MONITOR."
+
+while true; do
+  llm_run "$MONITOR_PROMPT" "$MONITOR_LOG"
+  grep -q STOP_MONITOR "$MONITOR_LOG" && break
+  sleep 180
+done
 ```
 
 Pros: independent of main session; persists across `/clear`.
-Cons: extra tmux + a `claude -p` instance every 3 min.
+Cons: extra tmux + an LLM provider call every 3 min.
 
 ### What the monitor checks
 
@@ -345,12 +364,14 @@ and the hive's local scripts source it + the skill's `pm_tool.sh`:
 ```bash
 # .tmp/agentic-hive/config.sh — per-project values only
 export LC_API="http://localhost:13491/api/v1"
-export LC_AUTH_HEADER="Authorization: Bearer claude"
-export PM_USER="claude"
+export LC_AUTH_HEADER="Authorization: Bearer lattice"
+export PM_USER="lattice"
 export TABLE_ID="pm"
 export WORKSPACE_ID="<uuid>"
 export PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export SKILLS_DIR="${PROJECT_DIR}/.agent-skills"
+export LLM_PROVIDER="${LLM_PROVIDER:-${LLM_BACKEND:-claude}}" # or codex
+export LLM_PROJECT_DIR="${PROJECT_DIR}"
 
 # queen.sh / bee.sh
 source "${SCRIPT_DIR}/config.sh"
@@ -366,5 +387,8 @@ source "${SKILLS_DIR}/developing/project-management/pm_tool.sh"
 |--------|------|
 | queen.sh | Pure rule-based: query PM → spawn → poll → cleanup |
 | bee.sh | Bash infra + LLM code: `source pm_tool.sh` for PM ops |
-| worker.sh | Swappable LLM backend: `work()` dispatches on `$LLM_BACKEND` (claude / codex / hermes) |
+| worker.sh | Stable ticket-work interface: `work()` and `work_stop()` |
+| llm.sh | Provider abstraction: validates, runs, and stops Claude or Codex |
+| format_claude_stream.py | Formats Claude stream-json as live log lines |
+| format_codex_stream.py | Formats `codex exec --json` JSONL as live log lines |
 | start.sh / stop.sh | tmux session lifecycle |

@@ -34,29 +34,38 @@ Read the example scripts in `.agent-skills/agent/agentic-hive/example-scripts/` 
 ### 2e. `bee.sh` — bash infra + LLM code
 - Extract row_id from task description
 - Set status to `in_progress` immediately (bash, not LLM)
-- Build context from CLAUDE.md, README.md, skills, ticket doc
+- Build context from AGENTS.md (with CLAUDE.md fallback), README.md, skills, ticket doc
 - Pipeline: implement → test → commit → done
 - PM status updates via bash helpers (never LLM)
-- Sources `worker.sh` for the actual LLM call — don't inline `claude -p` here
+- Sources `worker.sh` for the actual LLM call — don't inline a provider CLI here
 
-### 2f. `worker.sh` + `format_claude_stream.py` — copy, don't rewrite
-Unlike the other scripts, these two are copied as-is from
-`example-scripts/` (only edit `worker.sh` if you're adding a non-claude
-`LLM_BACKEND` branch). `worker.sh` exposes `work()` for `bee.sh`'s
-`step()`; `format_claude_stream.py` renders the claude backend's
-stream-json events into log lines.
+### 2f. LLM adapter helpers — copy, don't rewrite
+
+Copy these four files as-is from `example-scripts/`:
+
+- `worker.sh` — exposes the stable `work()` and `work_stop()` interface
+- `llm.sh` — selects and runs `LLM_PROVIDER=claude|codex`
+- `format_claude_stream.py` — formats Claude stream-json events
+- `format_codex_stream.py` — formats Codex JSONL events
+
+Provider-specific CLI details belong in `llm.sh`; `bee.sh` and
+`worker.sh` stay provider-neutral.
 
 ### 2g. `config.sh` — per-project values
 
 ```bash
 export LC_API="http://localhost:13491/api/v1"
-export LC_AUTH_HEADER="Authorization: Bearer claude"
-export PM_USER="claude"
+export LC_AUTH_HEADER="Authorization: Bearer lattice"
+export PM_USER="lattice"
 export TABLE_ID="pm"
 export WORKSPACE_ID="<uuid>"
 _THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PROJECT_DIR="$(cd "${_THIS_DIR}/../.." && pwd)"
 export SKILLS_DIR="${PROJECT_DIR}/.agent-skills"
+export LLM_PROVIDER="${LLM_PROVIDER:-${LLM_BACKEND:-claude}}" # claude or codex
+export LLM_PROJECT_DIR="${PROJECT_DIR}"
+# export CLAUDE_MODEL="sonnet"       # optional
+# export CODEX_MODEL="gpt-5.6-codex" # optional
 ```
 
 That's it. The helpers (`pm_*`, `lc_*`) are sourced from the skill,
@@ -75,7 +84,7 @@ When writing scripts, tailor these to the specific project:
 
 | What | Customize |
 |------|-----------|
-| **Context files** | Which files to load (CLAUDE.md, README.md, .tmp/llm*.md) |
+| **Context files** | Which files to load (AGENTS.md, CLAUDE.md, README.md, .tmp/llm*.md) |
 | **Skills loaded** | Which `Skill(developing-*)` to include in bee prompt |
 | **Test commands** | FE: svelte-check, build. BE: pytest, ast.parse. Or project-specific |
 | **Num workers** | 1 for simple tasks, 2-3 for parallel stories |
@@ -91,8 +100,10 @@ When writing scripts, tailor these to the specific project:
 ├── stop.sh                 ← kill session
 ├── queen.sh                ← pure rule-based task dispatch
 ├── bee.sh                  ← bash infra + LLM code
-├── worker.sh                  ← swappable LLM backend (work())
-└── format_claude_stream.py ← claude backend's stream-json formatter
+├── worker.sh               ← stable ticket-work interface
+├── llm.sh                  ← Claude/Codex provider adapter
+├── format_claude_stream.py ← Claude stream-json formatter
+└── format_codex_stream.py  ← Codex JSONL formatter
 ```
 
 PM/LC helpers (`pm_*`, `lc_*`) live in the skill submodule, not in
@@ -102,5 +113,5 @@ PM/LC helpers (`pm_*`, `lc_*`) live in the skill submodule, not in
 
 - [ ] LatticeCast PM running (`curl localhost:13491/api/v1/status`)
 - [ ] TABLE_ID set in `run.sh`
-- [ ] All 6 written scripts + the 2 copied helpers in place, all `chmod +x`
+- [ ] All 6 written scripts + the 4 copied LLM helpers in place, all `chmod +x`
 - [ ] `_col_cache.json` will be auto-created by queen at startup
