@@ -1,13 +1,26 @@
 ---
 name: developing/svelte
 description: Svelte/SvelteKit development — enforce pure TS logic in src/lib/, .svelte files handle UI/UX only, FE stores are cache of BE SSOT, render via $derived. Use when writing Svelte components or SvelteKit routes.
-version: 0.11.0
+version: 0.12.0
 ---
 
 # Svelte Architecture: Logic/UI Separation
 
 **Pure TS in `src/lib/`. Svelte handles UI/UX only.**
 
+## Top-Level Rule: Response → Store → Derived GUI
+
+Treat this shared-data flow as an invariant for every Svelte feature:
+
+```text
+Svelte UI event → lib/backend controller → BE/PG → backend response
+→ controller updates store cache → $derived state updates the GUI
+```
+
+- Let `.svelte` files call controllers, then react to the store. Never call `fetch` or mutate a shared domain store from a component or route.
+- Let `lib/backend/*` controllers own API calls and cache updates. Write the backend response into the store; if the mutation response is incomplete, perform an authoritative refetch in the controller first.
+- Derive shared GUI state from store cache with `$derived`. Use local `$state` only for UI-only state such as form input, modal visibility, selection, and pending flags.
+- Never duplicate, invent, or optimistically patch shared domain data in `.svelte`. The backend response is the only mutation result that may enter the cache.
 
 ## Testing: E2E First
 
@@ -47,17 +60,9 @@ Rules:
 - All business logic must be testable without Svelte runtime
 - Export clean interfaces — components consume, never define logic
 
-## Data Flow: BE is SSOT, FE is Cache
+## Data Flow Details
 
-The Principle
-
-**BE/PG is the single source of truth. FE stores are a local cache of BE state. All rendering MUST be `$derived` from store cache. Minimize `$effect` and local `$state`.**
-
-```
-FE operator -> call BE API lib/backend/*.ts (controller) -> PG (SSOT)  be response → store cache  → $derived chains → renders
-```
-
-FE stores are NOT their own source of truth. They are a **cache** of BE data. The only way to populate or update a store is through `lib/backend/` controller functions that call the BE API and write the response to the store.
+BE/PG is the single source of truth. FE stores are a cache populated only by `lib/backend/` controllers. Minimize `$effect` and local `$state`.
 
 
 ### Rules
@@ -66,7 +71,7 @@ FE stores are NOT their own source of truth. They are a **cache** of BE data. Th
 
 2. **`.svelte` files MUST NOT call BE API directly.** No `fetch()`, no `BACKEND_URL`, no HTTP calls in `<script>` blocks. All BE communication goes through `lib/backend/*.ts` controller functions.
 
-3. **Controller functions own the cache update.** `lib/backend/tables.ts::createTable()` calls the BE API, gets the response, then updates the store cache (e.g. calls `initSidebar()` to re-sync). The `.svelte` caller just `await`s and the store reactively updates the UI.
+3. **Controller functions own the cache update.** `lib/backend/tables.ts::createTable()` calls the BE API, caches the response (or performs an authoritative refetch), and returns. The `.svelte` caller only `await`s; the store reactively updates the UI.
 
 4. **Maximize `$derived`, minimize `$effect` and local `$state`.** Column order, filtered rows, grouped rows, render items, active view — all `$derived` from store cache. Only use `$effect` for genuine side effects (data fetch on route change, localStorage write, URL rewrite).
 
