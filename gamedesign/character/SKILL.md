@@ -1,5 +1,5 @@
 ---
-name: gamedesign-character
+name: gamedesign/character
 description: Generate character.yml for game characters — base profile, BigFive personality, multi-stage arcs for main characters.
 version: 0.1.0
 ---
