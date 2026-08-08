@@ -131,7 +131,7 @@ Ask: **"Approve these tickets? I'll create them in LatticeCast PM."**
 
 ## Step 6: Create Tickets in LatticeCast PM
 
-After user approves, use `Skill(developing-project-management)`:
+After user approves, use `Skill(developing/project-management)`:
 
 1. Use "Ensure LatticeCast is Running" — if not, prompt user
 2. Use "Setup Project" if PM table doesn't exist — create via template

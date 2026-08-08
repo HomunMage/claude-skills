@@ -156,10 +156,10 @@ $(head -200 "${PROJECT_DIR}/${f}")
 done
 
 # Only load programming skill — NOT project-management (PM API docs cause LLM to create junk rows)
-for skill in developing-programming/developing.md; do
+for skill in developing/programming/developing.md; do
   # NB: find | head -1 SIGPIPEs find when head closes the pipe → with `set -euo pipefail`
   # + `trap ERR` the worker dies in clean phase before any code runs. Use -print -quit.
-  sf="$(find "${PROJECT_DIR}/.claude/skills" -path "*/${skill}" -print -quit 2>/dev/null || true)"
+  sf="$(find "${PROJECT_DIR}/.agent-skills" -path "*/${skill}" -print -quit 2>/dev/null || true)"
   [ -n "$sf" ] && CONTEXT="${CONTEXT}
 --- Skill: $(basename $(dirname "$sf")) ---
 $(cat "$sf")

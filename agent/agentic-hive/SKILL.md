@@ -1,8 +1,8 @@
 ---
-name: agentic-hive
+name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.36.1
+version: 0.37.0
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -30,7 +30,7 @@ Practical sizing rules when filing tickets:
 
 - **One file changed.** If the implementation touches >1 file, the
   description is mixing concerns. Split.
-- **One topic** (for tests this is enforced by `developing-e2e`'s
+- **One topic** (for tests this is enforced by `developing/e2e`'s
   one-topic-per-file rule).
 - **<300 lines of new code.** Skim the description: if it sounds like
   "add column type X _and_ wire it through 4 views", that's 5 tickets,
@@ -50,7 +50,7 @@ Recovery from a TIMEOUT: see "Recovery rule" below.
 ## Prerequisites
 
 - **LatticeCast PM running** — `http://localhost:13491/api/v1/status` must respond
-- See `Skill(developing-project-management)` for setup (git clone + docker compose up)
+- See `Skill(developing/project-management)` for setup (git clone + docker compose up)
 - `README.md` — project overview
 
 ## Branch Hierarchy
@@ -78,9 +78,9 @@ main
 ### On Start — Read These First
 
 1. `README.md` — project overview, architecture, tech stack
-2. **Query LatticeCast PM** — use `Skill(developing-project-management)` "Query Tickets" for current status
+2. **Query LatticeCast PM** — use `Skill(developing/project-management)` "Query Tickets" for current status
 3. Any `.tmp/llm*.md` files — design docs, API specs, references
-4. **Load `Skill(developing-programming)`** + **`Skill(developing-project-management)`**
+4. **Load `Skill(developing/programming)`** + **`Skill(developing/project-management)`**
 
 ### Step 1: Identify Parent Story Branch
 
@@ -137,7 +137,7 @@ older UUID `row_id` shape is long gone.**
 ### Step 4T: Test Ticket (title starts with `e2e_test_` or tags include `"test"`)
 Instead of writing application code, write + run one e2e test.
 
-1. Load `Skill(developing-e2e)` — follow its two-container
+1. Load `Skill(developing/e2e)` — follow its two-container
    architecture (e2e runs the script, browser owns Chromium).
 2. Parse the test filename from the ticket title (the
    `e2e_test_<scope>_<topic>.py` token).
@@ -164,7 +164,7 @@ Instead of writing application code, write + run one e2e test.
 - **After ANY FE visual change**, take a Playwright snapshot via `docker compose exec browser` and verify it looks correct
 
 ### Step 5: Test, Format, Lint, Commit
-Use `Skill(developing-programming)` workflow:
+Use `Skill(developing/programming)` workflow:
 - Update PM status → `testing` via `PUT /api/v1/tables/{table_id}/rows/{row_id}`
 - Run tests (if fail → `debugging`, append error to doc)
 - Format + lint
@@ -331,10 +331,10 @@ doesn't reprocess it.
 
 ## Key Dependencies
 
-- `Skill(developing-lattice-cast)` — provides `lc_api.sh` (thin curl wrappers, generic).
-- `Skill(developing-project-management)` — provides `pm_tool.sh` (PM domain
+- `Skill(developing/lattice-cast)` — provides `lc_api.sh` (thin curl wrappers, generic).
+- `Skill(developing/project-management)` — provides `pm_tool.sh` (PM domain
   helpers; auto-sources `lc_api.sh` from the sibling skill).
-- `Skill(developing-programming)` — test/format/lint workflow.
+- `Skill(developing/programming)` — test/format/lint workflow.
 - LatticeCast PM — ticket tracking, doc storage (MinIO).
 
 ## Composition pattern
@@ -350,11 +350,11 @@ export PM_USER="claude"
 export TABLE_ID="pm"
 export WORKSPACE_ID="<uuid>"
 export PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-export SKILLS_DIR="${PROJECT_DIR}/.claude/skills"
+export SKILLS_DIR="${PROJECT_DIR}/.agent-skills"
 
 # queen.sh / bee.sh
 source "${SCRIPT_DIR}/config.sh"
-source "${SKILLS_DIR}/developing-project-management/pm_tool.sh"
+source "${SKILLS_DIR}/developing/project-management/pm_tool.sh"
 # pm_*, lc_* are now available
 ```
 

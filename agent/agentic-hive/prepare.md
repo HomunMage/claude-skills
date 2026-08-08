@@ -12,7 +12,7 @@ mkdir -p .tmp/agentic-hive .tmp/out
 
 ## Step 2: Write each script
 
-Read the example scripts in `.claude/skills/agentic-hive/example-scripts/` to understand the patterns, then **write customized versions** for this project:
+Read the example scripts in `.agent-skills/agent/agentic-hive/example-scripts/` to understand the patterns, then **write customized versions** for this project:
 
 ### 2a. `run.sh` — project-specific wrapper
 - Set `TABLE_ID` for this project's PM table
@@ -56,7 +56,7 @@ export TABLE_ID="pm"
 export WORKSPACE_ID="<uuid>"
 _THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PROJECT_DIR="$(cd "${_THIS_DIR}/../.." && pwd)"
-export SKILLS_DIR="${PROJECT_DIR}/.claude/skills"
+export SKILLS_DIR="${PROJECT_DIR}/.agent-skills"
 ```
 
 That's it. The helpers (`pm_*`, `lc_*`) are sourced from the skill,
@@ -65,8 +65,8 @@ not duplicated per project:
 ```bash
 # at the top of queen.sh / bee.sh:
 source "${SCRIPT_DIR}/config.sh"
-source "${SKILLS_DIR}/developing-project-management/pm_tool.sh"
-# pm_tool.sh auto-sources lc_api.sh from developing-lattice-cast
+source "${SKILLS_DIR}/developing/project-management/pm_tool.sh"
+# pm_tool.sh auto-sources lc_api.sh from developing/lattice-cast
 ```
 
 ## Customization points per project

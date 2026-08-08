@@ -1,1 +1,24 @@
 ## agent-skills
+
+- `agent/agentic-hive`
+- `agent/assistant`
+- `agent/instructions-creating`
+- `agent/seo-bot`
+- `agent/skill-guideline`
+- `business/interview`
+- `business/startup`
+- `content/how-to-guides`
+- `content/jekyll-mindmap`
+- `content/jekyll-slides`
+- `developing/db-sql`
+- `developing/debug-frontend`
+- `developing/e2e`
+- `developing/fastapi`
+- `developing/lattice-cast`
+- `developing/onboarding`
+- `developing/programming`
+- `developing/project-management`
+- `developing/svelte`
+- `gamedesign/character`
+- `gamedesign/outline`
+- `gamedesign/proposal`
