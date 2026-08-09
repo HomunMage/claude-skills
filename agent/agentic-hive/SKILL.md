@@ -2,7 +2,7 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.38.0
+version: 0.38.1
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -71,7 +71,7 @@ main
     └── issue/{issue-N-slug}    ← branched from story branch
 ```
 
-**Bees only implement issues.** Stories are never directly coded — they are merged into main automatically once all their issues are done.
+**Bees only implement issues.** Stories are never directly coded — they are merged into main automatically once all their issues are merged.
 
 ## Bee Workflow
 
@@ -88,7 +88,7 @@ Before creating a worktree, look up the issue's parent story in LatticeCast PM:
 
 ```bash
 # Get the issue row to find parent story row_id
-ISSUE_ROW_NUMBER="<row_id>"
+ISSUE_ROW_ID="<row_id>"
 TABLE_ID="<table_id>"
 # From row_data, get the Parent column value (= story row_id)
 # Then fetch that story row to get its type-<row_id> key (e.g. story-5)
@@ -106,7 +106,7 @@ git checkout -b "$STORY_BRANCH" 2>/dev/null || git checkout "$STORY_BRANCH"
 
 ```bash
 STORY_BRANCH="story/<story-key-lowercase>"
-TICKET_KEY="<issue-key>"  # e.g. L-13
+TICKET_KEY="<type>-<row_id>"  # e.g. task-13; PM has no Key column
 SLUG="issue/${TICKET_KEY}/$(echo '<short-description>' | tr ' ' '-')"
 git worktree add .tmp/bee_{id} -b "$SLUG" "$STORY_BRANCH"
 cd .tmp/bee_{id}
@@ -127,7 +127,7 @@ Each bee operates in its own worktree — no conflicts.
 
 **IMPORTANT: API uses `row_id` (BIGINT, integer) in URL paths and JSON.
 The v0.40 squash renamed the old `row_number` field to `row_id`; the
-older UUID `row_id` shape is long gone.**
+legacy UUID row identifier is long gone.**
 
 ### Step 3.5: Check if Test Ticket
 - Check the ticket's Tags column in `row_data`
@@ -197,8 +197,9 @@ git branch -d "$STORY_BRANCH"
 
 If siblings are **not all merged**, leave the story branch open.
 
-### Step 8: Done
-Bee sets PM status to `done`. Queen polls PM to detect completion — no trigger files needed.
+### Step 8: Complete
+Bee leaves the PM status at `merged`. Queen polls PM to detect completion —
+no trigger files are needed.
 
 ## Bee Rules
 
@@ -211,11 +212,11 @@ Bee sets PM status to `done`. Queen polls PM to detect completion — no trigger
 - **Commit messages:** `<type>-<row_id>: <verb> <what>` (e.g., `task-42: add user auth endpoint`, `bug-7: fix login redirect`)
 - **Issue branches base off story branch, not main.**
 - **Story branches base off main.**
-- **CRITICAL: Continuously update the ticket doc.** Use `PUT /api/v1/tables/{table_id}/rows/{row_id}/doc` (row_id, NOT row_id). Append timestamped entries after EVERY action. Empty doc after work = FAILED.
+- **CRITICAL: Continuously update the ticket doc.** Use `PUT /api/v1/tables/{table_id}/rows/{row_id}/doc` (`row_id`, not the removed `row_number`). Append timestamped entries after EVERY action. Empty doc after work = FAILED.
 - **CRITICAL: FE changes MUST have `.browser/` snapshot.** Run a Playwright check from `e2e` (`docker compose exec -T e2e python3 -c "..."` connecting via `BROWSER_WS`) — server-side `page.screenshot(path="/output/...")` lands at `.browser/...` on host. If the snapshot looks wrong, fix before committing.
-- **API uses row_id (integer) in URL paths**, not row_id (UUID). Example: `PUT /api/v1/tables/{tid}/rows/42` not `PUT /api/v1/rows/{uuid}`.
-- **NEVER POST new rows to update status.** Always use `PUT /api/v1/tables/{table_id}/rows/{row_id}` to update existing row_data. POST creates a NEW row with a new auto-generated Key — this causes duplicate rows (e.g. TO-* mirrors). Bees must ONLY update, never create.
-- **If stuck:** diagnose why, append error + analysis to ticket doc, try different approach. If can't finish in time: commit partial work, log what's done and what's left in doc, set status to `review`, signal DONE. Next bee picks up from where you left off by reading the doc.
+- **API uses `row_id` (integer) in URL paths**, not the removed UUID row identifier. Example: `PUT /api/v1/tables/{tid}/rows/42`.
+- **NEVER POST new rows to update status.** Always use `PUT /api/v1/tables/{table_id}/rows/{row_id}` to update existing row_data. POST creates a NEW row and therefore a duplicate derived ticket key such as `task-42`. Bees must ONLY update, never create.
+- **If stuck:** diagnose why, append error + analysis to the ticket doc, try a different approach. If it still cannot finish, commit recoverable partial work, log what's done and what's left, set status to `debugging`, and stop. The next bee resumes by reading the doc.
 
 ## Provider-neutral LLM workers (`worker.sh` + `llm.sh`)
 
@@ -332,7 +333,7 @@ Cons: extra tmux + an LLM provider call every 3 min.
 |--------|---------------|--------|
 | `3+ Still working` lines on the same step | LLM iterating on lint/test or stuck | flag, keep watching |
 | Bee step `debugging` | tests failed | flag, escalate after 2 cycles |
-| `TIMEOUT` in queen log | 900s budget hit | check `git log` — if commit landed, mark PM `done` manually |
+| `TIMEOUT` in queen log | 900s budget hit | check `git log` — if the merge landed, mark PM `merged` manually |
 | `ALL DONE!` and queue empty | hive finished | print summary table, stop the monitor |
 
 ### Recovery rule (TIMEOUT after commit)
@@ -340,7 +341,7 @@ Cons: extra tmux + an LLM provider call every 3 min.
 The queen times out bees at 900s. If the bee had already
 committed before the timeout, PM status will be stuck at `testing`/`review`
 even though the work is in `main`. The monitor MUST verify with
-`git log --oneline -5` and PUT the ticket to `done` so the next cycle
+`git log --oneline -5` and PUT the ticket to `merged` so the next cycle
 doesn't reprocess it.
 
 ### When NOT to spawn the monitor

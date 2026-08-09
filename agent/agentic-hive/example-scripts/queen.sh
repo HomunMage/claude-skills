@@ -10,11 +10,11 @@
 #     2. if none → ALL DONE, exit
 #     3. spawn N workers in tmux windows (pass TABLE_ID env, escape quotes in task)
 #     4. wait_finish: poll PM every 10s until ALL spawned rows
-#        leave (todo, in_progress, testing) → become (done, debugging, review, merged)
+#        leave (todo, in_progress, testing, review) → become (debugging, merged)
 #        - "todo" means worker hasn't picked it up yet — KEEP WAITING
 #        - "in_progress" means worker is coding — KEEP WAITING
 #        - "testing" means worker is testing — KEEP WAITING
-#        - anything else means worker is done — STOP WAITING
+#        - debugging or merged means worker is finished — STOP WAITING
 #        timeout after 900s → kill worker windows
 #     5. kill worker tmux windows (cleanup)
 #     6. sleep 3 → next cycle
@@ -80,8 +80,8 @@ for r in rows:
     if ! echo "$ACTIVE_WINDOWS" | grep -q "\-${rn}$"; then
       # No worker windows at all → this ticket is orphaned
       local cur
-      cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" | \
-        python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_id']==${rn}),None); print(json.dumps(r['row_data']) if r else '{}')" 2>/dev/null)
+      cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" -H "$AUTH" | \
+        python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['row_data']))" 2>/dev/null)
       local upd
       upd=$(echo "$cur" | python3 -c "import sys,json; d=json.load(sys.stdin); d['${SID}']='todo'; print(json.dumps(d))")
       curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" \
@@ -135,16 +135,16 @@ spawn_worker() {
 }
 
 # ─── Step 4: Wait for ALL workers to FINISH ───────────────────────────────────
-# "Finish" = PM status is NOT in (todo, in_progress, testing)
-# i.e. status became: done, debugging, review, merged
+# "Finish" = PM status is debugging or merged.
+# Review remains active because the worker still has to merge its commit.
 # IMPORTANT: "todo" means worker hasn't started yet — must keep waiting!
 # 900s is Non-negotiable, if you want set larger than 900s, means your task too large, spilt
 wait_finish() {
-  local ROW_NUMBERS="$1"
+  local ROW_IDS="$1"
   local TIMEOUT=900 ELAPSED=0
   local SID; SID=$(col Status)
 
-  log "Waiting for rows [${ROW_NUMBERS}] to finish (timeout ${TIMEOUT}s)..."
+  log "Waiting for rows [${ROW_IDS}] to finish (timeout ${TIMEOUT}s)..."
 
   while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
     sleep 10; ELAPSED=$((ELAPSED + 10))
@@ -155,14 +155,14 @@ wait_finish() {
     WORKER_WINDOWS=$(tmux list-windows -t "${SESSION}" -F '#{window_name}' 2>/dev/null | grep "^w[0-9]" || true)
     if [ -z "$WORKER_WINDOWS" ]; then
       log "No worker windows alive — resetting stuck tickets to todo"
-      for rn in $ROW_NUMBERS; do
+      for rn in $ROW_IDS; do
         local cur_status
-        cur_status=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" 2>/dev/null | \
-          python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if str(r['row_id'])=='${rn}'),None); print(r['row_data'].get('${SID}','') if r else '')" 2>/dev/null)
-        if [ "$cur_status" = "in_progress" ] || [ "$cur_status" = "testing" ]; then
+        cur_status=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" -H "$AUTH" 2>/dev/null | \
+          python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('${SID}',''))" 2>/dev/null)
+        if [ "$cur_status" = "in_progress" ] || [ "$cur_status" = "testing" ] || [ "$cur_status" = "review" ]; then
           local cur
-          cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" | \
-            python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if str(r['row_id'])=='${rn}'),None); print(json.dumps(r['row_data']) if r else '{}')" 2>/dev/null)
+          cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" -H "$AUTH" | \
+            python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['row_data']))" 2>/dev/null)
           local upd
           upd=$(echo "$cur" | python3 -c "import sys,json; d=json.load(sys.stdin); d['${SID}']='todo'; print(json.dumps(d))")
           curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" \
@@ -179,13 +179,13 @@ wait_finish() {
     STILL_WORKING=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" 2>/dev/null | python3 -c "
 import sys, json
 rows = json.load(sys.stdin)
-active = '${ROW_NUMBERS}'.split()
+active = '${ROW_IDS}'.split()
 working = []
 for rn in active:
     r = next((r for r in rows if str(r['row_id']) == rn), None)
     if r:
         s = r['row_data'].get('${SID}', '')
-        if s in ('todo', 'in_progress', 'testing'):
+        if s in ('todo', 'in_progress', 'testing', 'review'):
             working.append(rn)
 print(' '.join(working) if working else 'NONE')
 " 2>/dev/null)

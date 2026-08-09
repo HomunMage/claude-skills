@@ -29,13 +29,13 @@ Read the example scripts in `.agent-skills/agent/agentic-hive/example-scripts/` 
 ### 2d. `queen.sh` — pure rule-based task dispatch (NO LLM)
 - Cache column IDs at startup (`_col_cache.json`)
 - Recover orphaned in_progress tickets
-- Loop: query todo → spawn bees → poll PM until done → cleanup
+- Loop: query todo → spawn bees → poll PM until merged/debugging → cleanup
 
 ### 2e. `bee.sh` — bash infra + LLM code
 - Extract row_id from task description
 - Set status to `in_progress` immediately (bash, not LLM)
 - Build context from AGENTS.md (with CLAUDE.md fallback), README.md, skills, ticket doc
-- Pipeline: implement → test → commit → done
+- Pipeline: implement → test → review → merge → merged
 - PM status updates via bash helpers (never LLM)
 - Sources `worker.sh` for the actual LLM call — don't inline a provider CLI here
 

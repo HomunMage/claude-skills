@@ -49,7 +49,7 @@ print(\" \".join(f\"{k}={v}\" for k,v in sorted(c.items())) or \"none\")")
 ```
 
 Each tick yields one line like:
-`16:08:21 [ok] orch=2022352 w=1 | done=7 in_progress=1 | Still working: [10] (180s)`
+`16:08:21 [ok] orch=2022352 w=1 | merged=7 in_progress=1 | Still working: [10] (180s)`
 
 Flag and act on:
 - `ORCH_DEAD` — queen exited; check log, restart if needed.
@@ -97,4 +97,5 @@ Open LatticeCast PM board in browser:
 http://localhost:13491/<workspace>/<table>
 ```
 
-Switch to Sprint Board (Kanban) view to see ticket flow: `todo → in_progress → testing → done`
+Switch to Sprint Board (Kanban) view to see ticket flow:
+`todo → in_progress → testing → review → merged`.

@@ -3,7 +3,7 @@ name: developing/project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal library used by developing/programming, agent/agentic-hive, and developing/onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.10.0
+version: 0.10.1
 ---
 
 # LatticeCast Project Management
@@ -64,6 +64,10 @@ PUT /api/v1/tables/{table_id}/rows/{row_id}
 GET /api/v1/tables/{table_id}/rows/{row_id}/doc
 PUT /api/v1/tables/{table_id}/rows/{row_id}/doc
 ```
+
+PM templates do not contain a `Key` column. Derive the stable display key
+from the row type and integer ID: `<type>-<row_id>` (for example
+`story-5` or `bug-42`).
 
 Use `filter_json` to query by JSONB field without pagination issues:
 ```bash

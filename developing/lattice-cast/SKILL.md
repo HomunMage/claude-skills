@@ -1,7 +1,7 @@
 ---
 name: developing/lattice-cast
 description: Thin bash curl wrapper around the LatticeCast HTTP API — one function per route, no domain knowledge, no caching, no magic. Use as the foundation for project-specific tool layers (PM, SEO, dev tracking, etc.). Caller composes lc_api.sh + their own config.sh + domain helpers.
-version: 0.4.0
+version: 0.4.1
 ---
 
 # developing/lattice-cast
@@ -64,11 +64,11 @@ lc_column_delete  TID COL_ID      → DELETE /tables/{tid}/columns/{col_id}
 
 # ── rows (v40: row_id is the identifier, was row_number) ────────────
 lc_row_list   TID [LIMIT] [FILTER_JSON]  → GET /tables/{tid}/rows[?…]
+lc_row_get    TID ROW_ID                 → GET /tables/{tid}/rows/{row_id}
 lc_row_create TID JSON                   → POST /tables/{tid}/rows
                                             JSON = '{"row_data": {...}}'
                                             echoes the new row's row_id (int)
 lc_row_update TID ROW_ID JSON            → PUT    /tables/{tid}/rows/{row_id}
-# (no single-row GET — use lc_row_list with filter_json instead)
 lc_row_delete TID ROW_ID                 → DELETE /tables/{tid}/rows/{row_id}
 
 # ── docs (keyed by row_id, same as rows) ────────────────────────────

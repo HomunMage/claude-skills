@@ -35,36 +35,36 @@ STATUS_COL=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/
 
 pm_set_status() {
   local new_status="$1"
-  [ -z "$ROW_NUMBER" ] || [ -z "$TABLE_ID" ] && return
+  [ -z "$ROW_ID" ] || [ -z "$TABLE_ID" ] && return
   local cur
-  cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" \
+  cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_ID}" \
     -H "$LC_AUTH_HEADER" | \
-    python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_id']==${ROW_NUMBER}),None); print(json.dumps(r['row_data']) if r else '{}')" 2>/dev/null)
+    python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['row_data']))" 2>/dev/null)
   local updated
   updated=$(echo "$cur" | python3 -c "import sys,json; d=json.load(sys.stdin); d['${STATUS_COL}']='${new_status}'; print(json.dumps(d))")
-  curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_NUMBER}" \
+  curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_ID}" \
     -H "$LC_AUTH_HEADER" -H "Content-Type: application/json" \
     -d "{\"row_data\": ${updated}}" > /dev/null
-  log "Status → ${new_status} (row ${ROW_NUMBER})"
+  log "Status → ${new_status} (row ${ROW_ID})"
 }
 
 pm_read_doc() {
-  [ -z "$ROW_NUMBER" ] || [ -z "$TABLE_ID" ] && return
-  curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_NUMBER}/doc" \
+  [ -z "$ROW_ID" ] || [ -z "$TABLE_ID" ] && return
+  curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_ID}/doc" \
     -H "$LC_AUTH_HEADER" 2>/dev/null || echo ""
 }
 
 pm_append_doc() {
   local msg="$1"
-  [ -z "$ROW_NUMBER" ] || [ -z "$TABLE_ID" ] && return
+  [ -z "$ROW_ID" ] || [ -z "$TABLE_ID" ] && return
   local ts
   ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   local current
-  current=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_NUMBER}/doc" \
+  current=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_ID}/doc" \
     -H "$LC_AUTH_HEADER" 2>/dev/null || echo "")
   local updated="${current}
 - ${ts} ${msg}"
-  curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_NUMBER}/doc" \
+  curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_ID}/doc" \
     -H "$LC_AUTH_HEADER" -H "Content-Type: text/plain" \
     --data-raw "$updated" > /dev/null
 }
@@ -133,10 +133,10 @@ if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
 fi
 
 # ─── Phase 2: Extract row_id from task desc ─────────────────────────────
-ROW_NUMBER=$(echo "$TASK_DESC" | grep -oP 'row_id=\K[0-9]+' || echo "")
+ROW_ID=$(echo "$TASK_DESC" | grep -oP 'row_id=\K[0-9]+' || echo "")
 PARENT_RN=$(echo "$TASK_DESC" | grep -oP 'parent=\K[0-9]+' || echo "")
 
-if [ -z "$ROW_NUMBER" ]; then
+if [ -z "$ROW_ID" ]; then
   log "ERROR: No row_id in task desc"
   echo "BLOCKED" > "$TRIGGER_FILE"
   exit 1
@@ -192,7 +192,7 @@ RULES:
 - ONLY write application code. Do NOT run curl commands to any API or service.
 - Status updates are handled by the bash wrapper — never update ticket status yourself.
 - Focus ONLY on reading code and implementing the ticket.
-- Commit message: <type>-${ROW_NUMBER}: <short description> (e.g. task-42: add feature)"
+- Commit message: <type>-${ROW_ID}: <short description> (e.g. task-42: add feature)"
 
 # ─── Pipeline ────────────────────────────────────────────────────────────────
 
@@ -227,9 +227,9 @@ while ! mkdir "$GIT_LOCK" 2>/dev/null; do sleep 2; done
 
 TICKET_TITLE=$(echo "$TASK_DESC" | sed 's/ (row_id=.*//' | cut -c1-72)
 TYPE_COL=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/agentic-hive/_col_cache.json')).get('Type',''))" 2>/dev/null || echo "")
-TICKET_TYPE=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" \
+TICKET_TYPE=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_ID}" \
   -H "$LC_AUTH_HEADER" | \
-  python3 -c "import sys,json; rows=json.load(sys.stdin); r=next((r for r in rows if r['row_id']==${ROW_NUMBER}),None); print(r['row_data'].get('${TYPE_COL}','task') if r else 'task')" 2>/dev/null || echo "task")
+  python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('${TYPE_COL}','task'))" 2>/dev/null || echo "task")
 
 git add -A 2>/dev/null || true
 git reset HEAD .tmp/ 2>/dev/null || true
@@ -238,17 +238,17 @@ if git diff --cached --quiet; then
   log "No changes to commit"
   pm_append_doc "No changes needed"
 else
-  git commit -m "${TICKET_TYPE}-${ROW_NUMBER}: ${TICKET_TITLE}"
-  log "Committed ${TICKET_TYPE}-${ROW_NUMBER}"
-  pm_append_doc "Committed ${TICKET_TYPE}-${ROW_NUMBER}"
+  git commit -m "${TICKET_TYPE}-${ROW_ID}: ${TICKET_TITLE}"
+  log "Committed ${TICKET_TYPE}-${ROW_ID}"
+  pm_append_doc "Committed ${TICKET_TYPE}-${ROW_ID}"
 fi
 
 rmdir "$GIT_LOCK" 2>/dev/null || true
 
-# Step 4: Mark done
-pm_set_status "done"
+# Step 4: Mark merged
+pm_set_status "merged"
 pm_append_doc "W${WORKER_ID} finished"
 
-# ─── Signal done ─────────────────────────────────────────────────────────────
-# PM status already set to done — orchestrator will detect via poll
+# ─── Signal complete ─────────────────────────────────────────────────────────
+# PM status already set to merged — orchestrator will detect via poll
 log "W${WORKER_ID} finished: DONE"

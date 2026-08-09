@@ -142,7 +142,7 @@ After user approves, use `Skill(developing/project-management)`:
 
    **Epic doc** — full design overview, architecture decisions, scope:
    ```markdown
-   # {Key}: {Title}
+   # epic-{row_id}: {Title}
    
    ## Overview
    <paste the design discussion summary here>
@@ -159,7 +159,7 @@ After user approves, use `Skill(developing/project-management)`:
 
    **Story doc** — story-level spec, acceptance criteria, files to change:
    ```markdown
-   # {Key}: {Title}
+   # story-{row_id}: {Title}
    
    ## Parent
    [{epic_key}] {epic_title}
@@ -180,7 +180,7 @@ After user approves, use `Skill(developing/project-management)`:
 
    **Issue doc** — implementation instructions, specific steps:
    ```markdown
-   # {Key}: {Title}
+   # {task|bug}-{row_id}: {Title}
    
    ## Parent
    [{story_key}] {story_title}

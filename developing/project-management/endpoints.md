@@ -22,7 +22,7 @@ TOKEN=$(curl -s -X POST http://localhost:13491/api/v1/login/password \
 | Table | `POST /api/v1/tables` | `GET /api/v1/tables` | `PUT /api/v1/tables/{id}` | `DELETE /api/v1/tables/{id}` |
 | PM Template | `POST /api/v1/tables/template/pm` | — | — | — |
 | Column | `POST /api/v1/tables/{id}/columns` | (in table.columns) | `PUT /api/v1/tables/{id}/columns/{cid}` | `DELETE /api/v1/tables/{id}/columns/{cid}` |
-| Row | `POST /api/v1/tables/{id}/rows` | `GET /api/v1/tables/{id}/rows` | `PUT /api/v1/tables/{id}/rows/{row_id}` | `DELETE /api/v1/tables/{id}/rows/{row_id}` |
+| Row | `POST /api/v1/tables/{id}/rows` | `GET /api/v1/tables/{id}/rows`, `GET …/rows/{row_id}` | `PUT /api/v1/tables/{id}/rows/{row_id}` | `DELETE /api/v1/tables/{id}/rows/{row_id}` |
 | Doc | `PUT .../rows/{row_id}/doc` | `GET .../rows/{row_id}/doc` | same as create | — |
 
 ## Key Conventions
@@ -33,6 +33,8 @@ TOKEN=$(curl -s -X POST http://localhost:13491/api/v1/login/password \
 - Table PK is string `table_id` (lowercase, IS the table name)
 - Composite row PK: `(workspace_id, table_id, row_id)`
 - `workspace_id` is UUID
+- PM templates do not have a `Key` column. Derive a ticket key as
+  `<type>-<row_id>` (for example `task-42`).
 
 ## Query Tickets
 
@@ -45,22 +47,24 @@ python3 -c "
 import sys, json, urllib.request
 tables = json.load(sys.stdin)
 repo = '${REPO_NAME}'
-table = next((t for t in tables if t['name'].lower() == repo.lower()), None)
+table = next((t for t in tables if t['table_id'].lower() == repo.lower()), None)
 if not table:
     print(f'No PM table for \"{repo}\"'); exit()
 tid = table['table_id']
 cols = {c['name']: c['column_id'] for c in table.get('columns',[])}
-print(f'Project: {table[\"name\"]}  URL: http://localhost:13491/tables/{tid}')
+print(f'Project: {tid}  URL: http://localhost:13491/{table[\"workspace_id\"]}/{tid}')
 rows = json.loads(urllib.request.urlopen(urllib.request.Request(
     f'http://localhost:13491/api/v1/tables/{tid}/rows?offset=0&limit=20',
     headers={'Authorization': f'Bearer {TOKEN}'}
 )).read())
 rows.sort(key=lambda r: r.get('updated_at',''), reverse=True)
-kid,tid2,sid,pid,tyid = cols.get('Key',''),cols.get('Title',''),cols.get('Status',''),cols.get('Priority',''),cols.get('Type','')
+tid2,sid,pid,tyid = cols.get('Title',''),cols.get('Status',''),cols.get('Priority',''),cols.get('Type','')
 print(f'Tickets ({len(rows)}):')
 for r in rows:
     d = r.get('row_data',{})
-    print(f'  {d.get(kid,\"?\"):8s} [{d.get(sid,\"-\"):12s}] {d.get(pid,\"-\"):8s} {d.get(tyid,\"-\"):5s}  {d.get(tid2,\"(untitled)\")}')
+    ticket_type = d.get(tyid, 'row')
+    key = f'{ticket_type}-{r[\"row_id\"]}'
+    print(f'  {key:12s} [{d.get(sid,\"-\"):12s}] {d.get(pid,\"-\"):8s} {ticket_type:5s}  {d.get(tid2,\"(untitled)\")}')
 "
 ```
 
@@ -76,18 +80,16 @@ tables = json.loads(urllib.request.urlopen(urllib.request.Request(
     'http://localhost:13491/api/v1/tables',
     headers={'Authorization': f'Bearer {TOKEN}'}
 )).read())
-table = next((t for t in tables if t['name'].lower() == '${REPO_NAME}'.lower()), None)
+table = next((t for t in tables if t['table_id'].lower() == '${REPO_NAME}'.lower()), None)
 if not table: exit()
 tid = table['table_id']
 cols = {c['name']: c['column_id'] for c in table.get('columns',[])}
-status_id, key_id = cols.get('Status',''), cols.get('Key','')
-if not status_id or not key_id: exit()
-rows = json.loads(urllib.request.urlopen(urllib.request.Request(
-    f'http://localhost:13491/api/v1/tables/{tid}/rows?offset=0&limit=200',
+status_id = cols.get('Status','')
+if not status_id: exit()
+row = json.loads(urllib.request.urlopen(urllib.request.Request(
+    f'http://localhost:13491/api/v1/tables/{tid}/rows/<ROW_ID>',
     headers={'Authorization': f'Bearer {TOKEN}'}
 )).read())
-row = next((r for r in rows if r['row_id'] == <ROW_NUMBER>), None)
-if not row: print('Ticket not found'); exit()
 new_data = {**row['row_data'], status_id: '<NEW_STATUS>'}
 req = urllib.request.Request(
     f'http://localhost:13491/api/v1/tables/{tid}/rows/{row[\"row_id\"]}',
@@ -96,7 +98,9 @@ req = urllib.request.Request(
     method='PUT'
 )
 urllib.request.urlopen(req)
-print(f'<TICKET_KEY> → <NEW_STATUS>')
+type_id = cols.get('Type','')
+ticket_type = row['row_data'].get(type_id, 'row')
+print(f'{ticket_type}-{row[\"row_id\"]} → <NEW_STATUS>')
 "
 ```
 
@@ -155,8 +159,9 @@ for prn, kids in children_of.items():
             method='PUT'
         )
         urllib.request.urlopen(req)
-        key_id = cols.get('Key','')
-        print(f'Auto-merged parent: {parent[\"row_data\"].get(key_id, pid)}')
+        type_id = cols.get('Type','')
+        parent_type = parent['row_data'].get(type_id, 'row')
+        print(f'Auto-merged parent: {parent_type}-{prn}')
 "
 ```
 
