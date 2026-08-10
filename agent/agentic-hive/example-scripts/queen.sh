@@ -110,6 +110,8 @@ rows = json.load(sys.stdin)
 tyid = '$(col Type)'; tid = '$(col Title)'; pid = '$(col Parent)'
 todo = [r for r in rows if r['row_data'].get(tyid) in ('task', 'bug')]
 todo.sort(key=lambda x: x['row_id'])
+seen_parents = set()
+todo = [r for r in todo if not (r['row_data'].get(pid) in seen_parents or seen_parents.add(r['row_data'].get(pid)))]
 if not todo:
     print('ALL_DONE')
 else:
@@ -128,10 +130,19 @@ spawn_worker() {
   # Escape single quotes in TASK to prevent shell injection in tmux command
   local SAFE_TASK="${TASK//\'/\'\\\'\'}"
   local RN=$(echo "$TASK" | grep -oP 'row_id=\K[0-9]+' || echo "?")
+  local PARENT=$(echo "$TASK" | grep -oP 'parent=\K[0-9]+' || echo "")
+  [ -n "$PARENT" ] || { log "ERROR: task ${RN} has no parent story"; return 1; }
+  local STORY_BRANCH="story/story-${PARENT}"
+  local STORY_WORKTREE="${PROJECT_DIR}/.tmp/story_${PARENT}"
+  git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/${STORY_BRANCH}" || \
+    git -C "$PROJECT_DIR" branch "$STORY_BRANCH" main
+  if ! git -C "$STORY_WORKTREE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git -C "$PROJECT_DIR" worktree add "$STORY_WORKTREE" "$STORY_BRANCH"
+  fi
   local TTYPE=$(echo "$TASK" | head -c 20 | tr ' ' '-' | tr -cd 'a-z0-9-')
   log "Spawn W${WID}: ${TASK}"
   tmux new-window -t "${SESSION}" -n "w${WID}-${TTYPE}-${RN}" \
-    "TABLE_ID='${TABLE_ID}' bash ${SCRIPT_DIR}/bee.sh '${PROJECT_DIR}' ${WID} '${SAFE_TASK}' 2>&1 | tee -a ${PROJECT_DIR}/.tmp/out/worker_${WID}_${RN}.log"
+    "TABLE_ID='${TABLE_ID}' bash ${SCRIPT_DIR}/bee.sh '${STORY_WORKTREE}' ${WID} '${SAFE_TASK}' 2>&1 | tee -a ${PROJECT_DIR}/.tmp/out/worker_${WID}_${RN}.log"
 }
 
 # ─── Step 4: Wait for ALL workers to FINISH ───────────────────────────────────

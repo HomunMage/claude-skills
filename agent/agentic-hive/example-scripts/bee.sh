@@ -13,6 +13,10 @@ source "${SCRIPT_DIR}/worker.sh"
 
 PROJECT_DIR="${1:?Usage: bee.sh <project_dir> <worker_id> [task_description]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
+# The queen passes the persistent story worktree, never the repository root.
+# Keep provider commands in that same worktree so each ticket sees every prior
+# commit for its story.
+export LLM_PROJECT_DIR="$PROJECT_DIR"
 WORKER_ID="${2:?Worker ID required}"
 TASK_DESC="${3:-}"
 # row_id is parsed out of TASK_DESC below (`row_id=NN`) so each ticket
@@ -139,6 +143,13 @@ PARENT_RN=$(echo "$TASK_DESC" | grep -oP 'parent=\K[0-9]+' || echo "")
 if [ -z "$ROW_ID" ]; then
   log "ERROR: No row_id in task desc"
   echo "BLOCKED" > "$TRIGGER_FILE"
+  exit 1
+fi
+
+EXPECTED_STORY_BRANCH="story/story-${PARENT_RN}"
+if [ -z "$PARENT_RN" ] || [ "$(git branch --show-current)" != "$EXPECTED_STORY_BRANCH" ]; then
+  log "ERROR: bee must run in persistent ${EXPECTED_STORY_BRANCH} story worktree"
+  pm_set_status "debugging"
   exit 1
 fi
 

@@ -2,7 +2,7 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.38.2
+version: 0.38.3
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -65,13 +65,17 @@ Tickets follow a strict 3-level hierarchy: **Epic → Story → Issue**
 
 ```
 main
-└── story/{story-slug}          ← branched from main
-    ├── issue/{issue-1-slug}    ← branched from story branch
-    ├── issue/{issue-2-slug}    ← branched from story branch
-    └── issue/{issue-N-slug}    ← branched from story branch
+└── story/{story-row-id}        ← one persistent branch/worktree per feature
+    ├── task-{row-id} commit    ← serial ticket commit on the story branch
+    ├── bug-{row-id} commit
+    └── final integrated verification commit (if needed)
 ```
 
-**Bees only implement issues.** Stories are never directly coded — they are merged into main automatically once all their issues are merged.
+**One story has one persistent worktree and branch.** Bees process one ticket
+at a time per story and commit directly to that story branch; they never make
+issue branches. This keeps related controller/store/UI work on one integrated
+code state. Merge the story into `main` only after all child tickets and the
+story-level verification pass.
 
 ## Bee Workflow
 
@@ -102,17 +106,17 @@ git checkout main
 git checkout -b "$STORY_BRANCH" 2>/dev/null || git checkout "$STORY_BRANCH"
 ```
 
-### Step 2: Create Worktree Branch from Story Branch
+### Step 2: Reuse the Persistent Story Worktree
 
 ```bash
-STORY_BRANCH="story/<story-key-lowercase>"
-TICKET_KEY="<type>-<row_id>"  # e.g. task-13; PM has no Key column
-SLUG="issue/${TICKET_KEY}/$(echo '<short-description>' | tr ' ' '-')"
-git worktree add .tmp/bee_{id} -b "$SLUG" "$STORY_BRANCH"
-cd .tmp/bee_{id}
+STORY_BRANCH="story/story-<parent-row-id>"
+STORY_WORKTREE=".tmp/story_<parent-row-id>"
+git worktree add "$STORY_WORKTREE" "$STORY_BRANCH"  # only if it does not yet exist
+cd "$STORY_WORKTREE"
 ```
 
-Each bee operates in its own worktree — no conflicts.
+All tickets for this story use this same worktree serially. Tickets from other
+stories may use their own story worktrees in parallel.
 
 ### Step 3: Pick Ticket → update status → READ DOC FIRST
 - Query LatticeCast PM for `todo` issues (type=task or type=bug)
@@ -170,17 +174,10 @@ Use `Skill(developing/programming)` workflow:
 - Format + lint
 - Commit → update PM status to `review`
 
-### Step 6: Merge Issue into Story Branch & Cleanup
+### Step 6: Leave the Ticket Commit on the Story Branch
 
-```bash
-cd <project-root>
-git checkout "$STORY_BRANCH"
-git merge "$SLUG"                      # merge issue into story branch
-git worktree remove .tmp/bee_{id}
-git branch -d "$SLUG"
-```
-
-Update PM status → `merged`
+The ticket commit is already on the persistent story branch. Do not create,
+merge, or delete an issue branch/worktree. Update PM status → `merged`.
 
 ### Step 7: Check if All Story Issues Done → Merge Story into Main
 
@@ -210,8 +207,9 @@ no trigger files are needed.
 - **All tests must pass** before committing.
 - **Don't break existing tests.**
 - **Commit messages:** `<type>-<row_id>: <verb> <what>` (e.g., `task-42: add user auth endpoint`, `bug-7: fix login redirect`)
-- **Issue branches base off story branch, not main.**
 - **Story branches base off main.**
+- **Never create issue branches for tickets in a story.** Commit to the
+  persistent story branch and process sibling tickets serially.
 - **CRITICAL: Continuously update the ticket doc.** Use `PUT /api/v1/tables/{table_id}/rows/{row_id}/doc` (`row_id`, not the removed `row_number`). Append timestamped entries after EVERY action. Empty doc after work = FAILED.
 - **CRITICAL: FE changes MUST have `.browser/` snapshot.** Run a Playwright check from `e2e` (`docker compose exec -T e2e python3 -c "..."` connecting via `BROWSER_WS`) — server-side `page.screenshot(path="/output/...")` lands at `.browser/...` on host. If the snapshot looks wrong, fix before committing.
 - **API uses `row_id` (integer) in URL paths**, not the removed UUID row identifier. Example: `PUT /api/v1/tables/{tid}/rows/42`.
