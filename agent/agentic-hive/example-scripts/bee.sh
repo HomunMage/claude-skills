@@ -147,25 +147,56 @@ pm_set_status "in_progress"
 pm_append_doc "Picked up by W${WORKER_ID}"
 
 # ─── Phase 4: Build context ─────────────────────────────────────────────────
+# Read ticket doc before selecting specialist skills; it is the authoritative
+# scope and must be available to the skill gate.
+TICKET_DOC=$(pm_read_doc)
+log "Doc length: ${#TICKET_DOC} chars"
+
 CONTEXT=""
 
-for f in AGENTS.md CLAUDE.md README.md; do
+for f in AGENT.md AGENTS.md CLAUDE.md README.md; do
   [ -f "${PROJECT_DIR}/${f}" ] && CONTEXT="${CONTEXT}
 --- ${f} ---
 $(head -200 "${PROJECT_DIR}/${f}")
 "
 done
 
-# Only load programming skill — NOT project-management (PM API docs cause LLM to create junk rows)
-for skill in developing/programming/developing.md; do
-  # NB: find | head -1 SIGPIPEs find when head closes the pipe → with `set -euo pipefail`
-  # + `trap ERR` the worker dies in clean phase before any code runs. Use -print -quit.
-  sf="$(find "${PROJECT_DIR}/.agent-skills" -path "*/${skill}" -print -quit 2>/dev/null || true)"
-  [ -n "$sf" ] && CONTEXT="${CONTEXT}
---- Skill: $(basename $(dirname "$sf")) ---
-$(cat "$sf")
-"
-done
+# Skill gate: skills are loaded into the first provider prompt before the bee
+# is allowed to inspect application code.  A ticket's doc determines the
+# additional specialist skills; the complete skill folder is included so the
+# worker reads its references, not only the SKILL.md heading.
+read_skill_first() {
+  local skill="$1" skill_dir="${SKILLS_DIR}/${skill}"
+  [ -d "$skill_dir" ] || { log "ERROR: required skill missing: ${skill}"; exit 1; }
+  CONTEXT="${CONTEXT}
+===== REQUIRED SKILL FIRST: ${skill} ====="
+  while IFS= read -r -d '' file; do
+    CONTEXT="${CONTEXT}
+--- ${file#${SKILLS_DIR}/} ---
+$(cat "$file")"
+  done < <(find "$skill_dir" -type f \( -name '*.md' -o -name '*.sh' \) -print0 | sort -z)
+}
+
+# Every implementation worker reads these before any repository source.
+read_skill_first "agent/agentic-hive"
+read_skill_first "developing/programming"
+read_skill_first "developing/project-management"
+
+# Add the specialist rule set before implementation whenever the ticket scope
+# names that surface. The task doc is the authoritative specification.
+scope_text="${TASK_DESC} ${TICKET_DOC}"
+case "${scope_text,,}" in
+  *frontend*|*svelte*|*.svelte*|*.ts*) read_skill_first "developing/svelte" ;;
+esac
+case "${scope_text,,}" in
+  *backend*|*fastapi*|*.py*) read_skill_first "developing/fastapi" ;;
+esac
+case "${scope_text,,}" in
+  *migration*|*postgres*|*sql*) read_skill_first "developing/db-sql" ;;
+esac
+case "${scope_text,,}" in
+  *e2e*|*playwright*|*snapshot*) read_skill_first "developing/e2e" ;;
+esac
 
 for f in "${PROJECT_DIR}"/.tmp/llm*.md; do
   [ -f "$f" ] || continue
@@ -174,10 +205,6 @@ for f in "${PROJECT_DIR}"/.tmp/llm*.md; do
 $(head -200 "$f")
 "
 done
-
-# Read ticket doc FIRST — doc has all implementation detail, title is just a summary
-TICKET_DOC=$(pm_read_doc)
-log "Doc length: ${#TICKET_DOC} chars"
 
 SHARED="You are Worker ${WORKER_ID}. Dir: ${PROJECT_DIR}
 
@@ -189,6 +216,8 @@ ${TICKET_DOC}
 TASK: ${TASK_DESC}
 
 RULES:
+- REQUIRED SKILLS ABOVE ARE FIRST. Read every supplied skill section before
+  reading or editing repository source; do not begin implementation otherwise.
 - ONLY write application code. Do NOT run curl commands to any API or service.
 - Status updates are handled by the bash wrapper — never update ticket status yourself.
 - Focus ONLY on reading code and implementing the ticket.
