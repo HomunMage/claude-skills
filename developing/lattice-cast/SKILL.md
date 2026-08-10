@@ -1,7 +1,7 @@
 ---
 name: developing/lattice-cast
-description: Thin bash curl wrapper around the LatticeCast HTTP API — one function per route, no domain knowledge, no caching, no magic. Use as the foundation for project-specific tool layers (PM, SEO, dev tracking, etc.). Caller composes lc_api.sh + their own config.sh + domain helpers.
-version: 0.4.1
+description: Thin bash curl wrapper around the LatticeCast HTTP API — one function per route, no domain knowledge, no caching, no magic. Use as the foundation for project-specific tool layers (PM, SEO, dev tracking, etc.). Caller composes lc_api.sh + their own .env + domain helpers.
+version: 0.4.2
 ---
 
 # developing/lattice-cast
@@ -17,7 +17,7 @@ domain-specific tool layers on top.
 ## Composition rule
 
 ```
-your_tool.sh = lc_api.sh + your_project/config.sh + your domain fns
+your_tool.sh = lc_api.sh + your_project/.env + your domain fns
 ```
 
 Sourcing `lc_api.sh` only **defines functions** — it has no side effects
@@ -29,7 +29,7 @@ documented env vars before any `lc_*` call.
 | Var | Required | Purpose |
 |---|---|---|
 | `LC_API` | yes | Base URL, e.g. `http://localhost:13491/api/v1` |
-| `LC_AUTH_HEADER` | yes | Full header value, e.g. `Authorization: Bearer claude` |
+| `LC_AUTH_HEADER` | yes | Runtime header set after login, e.g. `Authorization: Bearer ${TOKEN}` |
 | `LC_PROJECT_DIR` | no | Where consumer wants caches; `lc_api.sh` doesn't write any |
 | `LC_THROTTLE_MS` | no | Sleep between calls (default 0). |
 
@@ -115,8 +115,13 @@ lc_block_query TID VIEW_ID BLOCK_ID [PARAMS_JSON]
 ```bash
 # In a consumer's tool layer (e.g. pm_tool.sh):
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "${SCRIPT_DIR}/config.sh"               # exports LC_API, LC_AUTH_HEADER, …
+set -a
+source "${SCRIPT_DIR}/.env"                    # exports LC_API, LC_USER/LC_PASS or PM_USER/PM_PASS
+set +a
 source "${SKILLS_DIR}/developing/lattice-cast/lc_api.sh"
+
+TOKEN="$(lc_login_password "${LC_USER}" "${LC_PASS}")"
+export LC_AUTH_HEADER="Authorization: Bearer ${TOKEN}"
 
 # now lc_* functions are available
 lc_status

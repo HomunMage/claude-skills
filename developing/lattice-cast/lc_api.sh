@@ -7,7 +7,7 @@
 #
 # Caller MUST set before any lc_* call:
 #   LC_API           — base URL, e.g. http://localhost:13491/api/v1
-#   LC_AUTH_HEADER   — full header, e.g. "Authorization: Bearer claude"
+#   LC_AUTH_HEADER   — full header, e.g. "Authorization: Bearer <access_token>"
 # Optional:
 #   LC_THROTTLE_MS   — sleep between calls (default 0)
 #

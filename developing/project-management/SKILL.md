@@ -3,7 +3,7 @@ name: developing/project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal library used by developing/programming, agent/agentic-hive, and developing/onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.10.1
+version: 0.10.2
 ---
 
 # LatticeCast Project Management
@@ -14,7 +14,7 @@ version: 0.10.1
 > and source `lc_api.sh` from the sibling skill. Compose at the consumer:
 >
 > ```bash
-> source <project>/config.sh        # exports LC_API, PM_USER, TABLE_ID, …
+> set -a; source <project>/.env; set +a   # exports LC_API, PM_USER, TABLE_ID, …
 > source <skills>/developing/project-management/pm_tool.sh   # auto-sources lc_api.sh
 > pm_login; pm_get_todo_tasks
 > ```

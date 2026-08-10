@@ -2,7 +2,7 @@
 name: agent/assistant
 description: Always-on AI assistant with theme delegation — assistant-main chats, theme-managers autonomously, assistant-main-backup handles recovery
 argument-hint: start | stop | status
-version: 0.5.0
+version: 0.5.1
 ---
 
 # agent/assistant — Persistent AI Assistant
@@ -56,7 +56,7 @@ Spawn/stop/status commands → see `spawn-theme.md`
 
 ```
 agent/assistant (this skill)
-  └── agentic-hive (queen, bees, worker.sh backend, plan/prepare/running)
+  └── agentic-hive (queen, bees, llm.sh backend, plan/prepare/running)
         └── developing/project-management (pm_tool.sh)
               └── developing/lattice-cast (lc_api.sh)
         └── developing/programming (test/format/lint)

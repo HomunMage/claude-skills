@@ -65,7 +65,7 @@ tmux attach -t assistant-main
 - Flow:
   1. (Optional)**Create PM table** — `POST /api/v1/tables/template/pm` to create a fresh PM table for this theme if necessary. Each theme gets its own table, its own TABLE_ID.
   2. **Initiative** — decompose goal into several epics, each epic into stories/tasks in the new table
-  3. **Prepare** — write `.tmp/agentic-hive/config.sh` with the new TABLE_ID
+  3. **Prepare** — write `.tmp/agentic-hive/.env` with the new TABLE_ID
   4. **Running** — start the hive (queen + bees)
 - After starting the hive, monitor via `ScheduleWakeup(120s)`:
   - Read `.tmp/out/queen.log` and `worker_*.log`
@@ -89,7 +89,7 @@ tmux attach -t assistant-main
 
 ```
 agent/assistant (this skill)
-  └── agentic-hive (queen, bees, worker.sh backend, plan/prepare/running)
+        └── agentic-hive (queen, bees, llm.sh backend, plan/prepare/running)
         └── developing/project-management (pm_tool.sh)
               └── developing/lattice-cast (lc_api.sh)
         └── developing/programming (test/format/lint)

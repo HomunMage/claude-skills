@@ -6,12 +6,19 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SEO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck disable=SC1091
-source "${SEO_DIR}/config.sh"
+ENV_FILE="${SEO_DIR}/.env"
+if [ -f "${ENV_FILE}" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+fi
 source "${SEO_DIR}/lc_api.sh"
 LOG="${SEO_DIR}/.tmp/seo-bot.log"
 mkdir -p "${SEO_DIR}/.tmp"
 : > "$LOG"
+LC_USER="${LC_USER:-}"
+LC_PASS="${LC_PASS:-}"
 
 log() { echo "$(date '+%H:%M:%S') [ORCH] $*" | tee -a "$LOG"; }
 
@@ -38,8 +45,20 @@ log "loaded ${#A_LINES[@]} audiences, ${#B_LINES[@]} promotions, ${#C_LINES[@]} 
 EXPECTED=$(( ${#A_LINES[@]} * ${#B_LINES[@]} * ${#C_LINES[@]} ))
 log "full cross product = $EXPECTED combinations"
 
-: "${ARTICLES_TABLE_ID:?ARTICLES_TABLE_ID must be set in config.sh}"
-: "${TITLE_COLUMN_ID:?TITLE_COLUMN_ID must be set in config.sh}"
+: "${ARTICLES_TABLE_ID:?ARTICLES_TABLE_ID must be set in .env}"
+: "${TITLE_COLUMN_ID:?TITLE_COLUMN_ID must be set in .env}"
+
+if [ -z "${LC_AUTH_HEADER:-}" ] && [ -n "${LC_USER}" ]; then
+    LC_TOKEN=""
+    if [ -n "${LC_PASS}" ]; then
+        LC_TOKEN=$(curl -s -X POST "${LC_API}/login/password" \
+            -H "Content-Type: application/json" \
+            -d "{\"user_name\":\"${LC_USER}\",\"password\":\"${LC_PASS}\"}" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || echo "")
+    fi
+    [ -n "${LC_TOKEN}" ] || LC_TOKEN="${LC_USER}"
+    export LC_AUTH_HEADER="Authorization: Bearer ${LC_TOKEN}"
+fi
 
 # Build skip-set from existing articles
 mapfile -t EXISTING < <(

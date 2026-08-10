@@ -22,11 +22,13 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck disable=SC1091
-# Sourcing config.sh here makes queen.sh self-sufficient regardless of
-# whether it inherits env from start.sh. Critical when tmux new-session
-# attaches to an already-running tmux server whose env predates this run.
-source "${SCRIPT_DIR}/config.sh"
+ENV_FILE="${SCRIPT_DIR}/.env"
+if [ -f "${ENV_FILE}" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+fi
 
 PROJECT_DIR="${1:?Usage: queen.sh <project_dir> [max_cycles] [num_workers]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
@@ -35,9 +37,22 @@ NUM_WORKERS="${3:-1}"
 SESSION="$(basename "$PROJECT_DIR")"
 LOG_FILE="${PROJECT_DIR}/.tmp/out/queen.log"
 CYCLE=0
+PM_USER="${PM_USER:-claude}"
+PM_PASS="${PM_PASS:-}"
 
 PM_URL="${LC_API%/api/v1}"
 TABLE_ID="${TABLE_ID:?Set TABLE_ID}"
+if [ -z "${LC_AUTH_HEADER:-}" ]; then
+  PM_TOKEN=""
+  if [ -n "${PM_PASS}" ]; then
+    PM_TOKEN=$(curl -s -X POST "${PM_URL}/api/v1/login/password" \
+      -H "Content-Type: application/json" \
+      -d "{\"user_name\":\"${PM_USER}\",\"password\":\"${PM_PASS}\"}" \
+      | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || echo "")
+  fi
+  [ -n "${PM_TOKEN}" ] || PM_TOKEN="${PM_USER}"
+  export LC_AUTH_HEADER="Authorization: Bearer ${PM_TOKEN}"
+fi
 AUTH="${LC_AUTH_HEADER}"
 
 mkdir -p "${PROJECT_DIR}/.tmp/out"

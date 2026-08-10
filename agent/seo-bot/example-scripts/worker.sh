@@ -6,16 +6,35 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SEO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck disable=SC1091
-source "${SEO_DIR}/config.sh"
+ENV_FILE="${SEO_DIR}/.env"
+if [ -f "${ENV_FILE}" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+fi
 source "${SEO_DIR}/lc_api.sh"
 
 A_TITLE="${1:?a_title required}";  A_DESC="${2:?a_desc required}"
 B_TITLE="${3:?b_title required}";  B_DESC="${4:?b_desc required}"
 C_TITLE="${5:?c_title required}";  C_DESC="${6:?c_desc required}"
+LC_USER="${LC_USER:-}"
+LC_PASS="${LC_PASS:-}"
 
-: "${ARTICLES_TABLE_ID:?ARTICLES_TABLE_ID must be set in config.sh}"
-: "${TITLE_COLUMN_ID:?TITLE_COLUMN_ID must be set in config.sh}"
+: "${ARTICLES_TABLE_ID:?ARTICLES_TABLE_ID must be set in .env}"
+: "${TITLE_COLUMN_ID:?TITLE_COLUMN_ID must be set in .env}"
+
+if [ -z "${LC_AUTH_HEADER:-}" ] && [ -n "${LC_USER}" ]; then
+    LC_TOKEN=""
+    if [ -n "${LC_PASS}" ]; then
+        LC_TOKEN=$(curl -s -X POST "${LC_API}/login/password" \
+            -H "Content-Type: application/json" \
+            -d "{\"user_name\":\"${LC_USER}\",\"password\":\"${LC_PASS}\"}" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || echo "")
+    fi
+    [ -n "${LC_TOKEN}" ] || LC_TOKEN="${LC_USER}"
+    export LC_AUTH_HEADER="Authorization: Bearer ${LC_TOKEN}"
+fi
 
 ARTICLE_TITLE="${A_TITLE}-${B_TITLE}-${C_TITLE}"
 ARTICLE_FILE="${SEO_DIR}/.tmp/article-${ARTICLE_TITLE}.md"

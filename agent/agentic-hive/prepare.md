@@ -37,35 +37,35 @@ Read the example scripts in `.agent-skills/agent/agentic-hive/example-scripts/` 
 - Build context from AGENTS.md (with CLAUDE.md fallback), README.md, skills, ticket doc
 - Pipeline: implement → test → review → merge → merged
 - PM status updates via bash helpers (never LLM)
-- Sources `worker.sh` for the actual LLM call — don't inline a provider CLI here
+- Sources `llm.sh` for the actual LLM call — don't inline a provider CLI here
 
 ### 2f. LLM adapter helpers — copy, don't rewrite
 
-Copy these four files as-is from `example-scripts/`:
+Copy these three files as-is from `example-scripts/`:
 
-- `worker.sh` — exposes the stable `work()` and `work_stop()` interface
 - `llm.sh` — selects and runs `LLM_PROVIDER=claude|codex`
 - `format_claude_stream.py` — formats Claude stream-json events
 - `format_codex_stream.py` — formats Codex JSONL events
 
-Provider-specific CLI details belong in `llm.sh`; `bee.sh` and
-`worker.sh` stay provider-neutral.
+Provider-specific CLI details belong in `llm.sh`; `bee.sh` stays
+provider-neutral.
 
-### 2g. `config.sh` — per-project values
+### 2g. `.env` — per-project values
+
+Write `.tmp/agentic-hive/.env` from `.env.example`:
 
 ```bash
-export LC_API="http://localhost:13491/api/v1"
-export LC_AUTH_HEADER="Authorization: Bearer lattice"
-export PM_USER="lattice"
-export TABLE_ID="pm"
-export WORKSPACE_ID="<uuid>"
-_THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export PROJECT_DIR="$(cd "${_THIS_DIR}/../.." && pwd)"
-export SKILLS_DIR="${PROJECT_DIR}/.agent-skills"
-export LLM_PROVIDER="${LLM_PROVIDER:-${LLM_BACKEND:-claude}}" # claude or codex
-export LLM_PROJECT_DIR="${PROJECT_DIR}"
-# export CLAUDE_MODEL="sonnet"       # optional
-# export CODEX_MODEL="gpt-5.6-codex" # optional
+LC_API=http://localhost:13491/api/v1
+PM_USER=lattice
+PM_PASS=
+TABLE_ID=pm
+WORKSPACE_ID=<uuid>
+PROJECT_DIR=/abs/path/to/project
+SKILLS_DIR=/abs/path/to/project/.agent-skills
+LLM_PROVIDER=claude
+LLM_PROJECT_DIR=/abs/path/to/project
+# CLAUDE_MODEL=sonnet
+# CODEX_MODEL=gpt-5.6-codex
 ```
 
 That's it. The helpers (`pm_*`, `lc_*`) are sourced from the skill,
@@ -73,7 +73,9 @@ not duplicated per project:
 
 ```bash
 # at the top of queen.sh / bee.sh:
-source "${SCRIPT_DIR}/config.sh"
+set -a
+source "${SCRIPT_DIR}/.env"
+set +a
 source "${SKILLS_DIR}/developing/project-management/pm_tool.sh"
 # pm_tool.sh auto-sources lc_api.sh from developing/lattice-cast
 ```
@@ -94,13 +96,13 @@ When writing scripts, tailor these to the specific project:
 
 ```
 .tmp/agentic-hive/
-├── config.sh               ← per-project: LC_API, WORKSPACE_ID, TABLE_ID, …
-├── run.sh                  ← bash run.sh — sources config.sh, calls start.sh
+├── .env                    ← per-project: LC_API, WORKSPACE_ID, TABLE_ID, …
+├── .env.example            ← template for the local .env
+├── run.sh                  ← bash run.sh — calls start.sh
 ├── start.sh                ← tmux session setup
 ├── stop.sh                 ← kill session
 ├── queen.sh                ← pure rule-based task dispatch
 ├── bee.sh                  ← bash infra + LLM code
-├── worker.sh               ← stable ticket-work interface
 ├── llm.sh                  ← Claude/Codex provider adapter
 ├── format_claude_stream.py ← Claude stream-json formatter
 └── format_codex_stream.py  ← Codex JSONL formatter
@@ -112,6 +114,6 @@ PM/LC helpers (`pm_*`, `lc_*`) live in the skill submodule, not in
 ## Checklist before running
 
 - [ ] LatticeCast PM running (`curl localhost:13491/api/v1/status`)
-- [ ] TABLE_ID set in `run.sh`
-- [ ] All 6 written scripts + the 4 copied LLM helpers in place, all `chmod +x`
+- [ ] `TABLE_ID` set in `.tmp/agentic-hive/.env`
+- [ ] All 5 written scripts + the 3 copied LLM helpers in place, all `chmod +x`
 - [ ] `_col_cache.json` will be auto-created by queen at startup

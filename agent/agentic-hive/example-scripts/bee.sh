@@ -1,24 +1,32 @@
 #!/bin/bash
-# bee.sh — Sequential pipeline: each step is a fresh provider-neutral work() call
+# bee.sh — Sequential pipeline: each step is a fresh llm_run() call
 # Usage: bash bee.sh <project_dir> <worker_id> [task_description]
 
 set -euo pipefail
 
-# shellcheck disable=SC1091
-# Self-source config.sh — bees spawn in tmux windows that may not inherit
-# env from the queen (existing tmux server case).
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "${SCRIPT_DIR}/config.sh"
-source "${SCRIPT_DIR}/worker.sh"
+ENV_FILE="${SCRIPT_DIR}/.env"
+if [ -f "${ENV_FILE}" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+fi
+source "${SCRIPT_DIR}/llm.sh"
 
 PROJECT_DIR="${1:?Usage: bee.sh <project_dir> <worker_id> [task_description]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
+REPO_ROOT="$(git -C "${PROJECT_DIR}" rev-parse --show-toplevel 2>/dev/null || printf '%s' "${PROJECT_DIR}")"
+export SKILLS_DIR="${SKILLS_DIR:-${REPO_ROOT}/.agent-skills}"
+export LLM_PROVIDER="${LLM_PROVIDER:-${LLM_BACKEND:-claude}}"
 # The queen passes the persistent story worktree, never the repository root.
 # Keep provider commands in that same worktree so each ticket sees every prior
 # commit for its story.
-export LLM_PROJECT_DIR="$PROJECT_DIR"
+export LLM_PROJECT_DIR="${LLM_PROJECT_DIR:-$PROJECT_DIR}"
 WORKER_ID="${2:?Worker ID required}"
 TASK_DESC="${3:-}"
+PM_USER="${PM_USER:-claude}"
+PM_PASS="${PM_PASS:-}"
 # row_id is parsed out of TASK_DESC below (`row_id=NN`) so each ticket
 # gets its own log file: worker_<wid>_<row_id>.log. Easier to triage a
 # specific failure than scrolling through a shared worker_<wid>.log.
@@ -27,6 +35,18 @@ LOG_FILE="${PROJECT_DIR}/.tmp/out/worker_${WORKER_ID}_${ROW_ID}.log"
 GIT_LOCK="${PROJECT_DIR}/_git.lock"
 PM_URL="${LC_API%/api/v1}"
 TABLE_ID="${TABLE_ID:-}"
+
+if [ -z "${LC_AUTH_HEADER:-}" ]; then
+  PM_TOKEN=""
+  if [ -n "${PM_PASS}" ]; then
+    PM_TOKEN=$(curl -s -X POST "${PM_URL}/api/v1/login/password" \
+      -H "Content-Type: application/json" \
+      -d "{\"user_name\":\"${PM_USER}\",\"password\":\"${PM_PASS}\"}" \
+      | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || echo "")
+  fi
+  [ -n "${PM_TOKEN}" ] || PM_TOKEN="${PM_USER}"
+  export LC_AUTH_HEADER="Authorization: Bearer ${PM_TOKEN}"
+fi
 
 mkdir -p "${PROJECT_DIR}/.tmp/out"
 
@@ -77,9 +97,8 @@ step() {
   local step_name="$1"
   local prompt="$2"
   log "Step: ${step_name}..."
-  # work() (worker.sh) delegates to llm.sh, which streams progress from the
-  # configured LLM_PROVIDER into $LOG_FILE. Provider changes do not touch
-  # this orchestration layer.
+  # llm_run() streams progress from the configured LLM_PROVIDER into
+  # $LOG_FILE. Provider changes stay inside llm.sh.
   #
   # Watchdog: the backend has been observed to hang silently after a few
   # minutes (Agent/Explore sub-agent stall or API hangup that doesn't
@@ -87,7 +106,7 @@ step() {
   # process if it hasn't grown for 120s. ERR trap then flips the row
   # to `debugging` and the queen advances — trading 120s detection for
   # 780s of otherwise-wasted budget.
-  work "${prompt}" "$LOG_FILE" &
+  llm_run "${prompt}" "$LOG_FILE" &
   local pipe_pid=$!
 
   (
@@ -100,9 +119,9 @@ step() {
         stuck=$((stuck + 30))
         if [ "$stuck" -ge 120 ]; then
           log "Watchdog: no log growth for 120s — killing ${LLM_PROVIDER} provider"
-          work_stop "$pipe_pid" TERM
+          llm_stop "$pipe_pid" TERM
           sleep 2
-          work_stop "$pipe_pid" KILL
+          llm_stop "$pipe_pid" KILL
           break
         fi
       else
@@ -113,11 +132,11 @@ step() {
   ) &
   local watchdog_pid=$!
 
-  local work_status=0
-  wait "$pipe_pid" 2>/dev/null || work_status=$?
+  local llm_status=0
+  wait "$pipe_pid" 2>/dev/null || llm_status=$?
   kill "$watchdog_pid" 2>/dev/null || true
   wait "$watchdog_pid" 2>/dev/null || true
-  return "$work_status"
+  return "$llm_status"
 }
 
 # If any step fails, signal BLOCKED and exit

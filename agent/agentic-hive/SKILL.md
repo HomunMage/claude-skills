@@ -2,7 +2,7 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.38.4
+version: 0.38.5
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -223,20 +223,19 @@ no trigger files are needed.
 - **NEVER POST new rows to update status.** Always use `PUT /api/v1/tables/{table_id}/rows/{row_id}` to update existing row_data. POST creates a NEW row and therefore a duplicate derived ticket key such as `task-42`. Bees must ONLY update, never create.
 - **If stuck:** diagnose why, append error + analysis to the ticket doc, try a different approach. If it still cannot finish, commit recoverable partial work, log what's done and what's left, set status to `debugging`, and stop. The next bee resumes by reading the doc.
 
-## Provider-neutral LLM workers (`worker.sh` + `llm.sh`)
+## Provider-neutral LLM adapter (`llm.sh`)
 
-Bees don't call an LLM CLI directly — `bee.sh`'s `step()` calls
-`work()` from `example-scripts/worker.sh`. That thin ticket-work layer
-delegates to `llm_run()` in `example-scripts/llm.sh`, which selects
+Bees don't call an LLM CLI inline — `bee.sh`'s `step()` calls
+`llm_run()` from `example-scripts/llm.sh`, which selects
 `$LLM_PROVIDER` (`claude` by default, or `codex`) and streams progress
 lines back into the step's log file. `$LLM_BACKEND` remains a backwards-
 compatible alias. Adding another CLI provider changes `llm.sh` and its
-formatter only — `queen.sh`, `bee.sh`, and `worker.sh` stay unchanged.
+formatter only — `queen.sh` and `bee.sh` stay unchanged.
 
 The abstraction is:
 
 ```text
-bee.sh step() → worker.sh work() → llm.sh llm_run() → Claude or Codex CLI
+bee.sh step() → llm.sh llm_run() → Claude or Codex CLI
 ```
 
 The `claude` backend calls `claude -p --output-format=stream-json
@@ -275,10 +274,9 @@ long-running tool call. The subprocess stays alive but the event
 pipe stops emitting events; without a guard the ticket burns the full
 900s budget waiting.
 
-The `example-scripts/bee.sh` `step()` function wraps `work()` with a
-watchdog that samples the log file every 30s and calls the provider-neutral
-`work_stop()`/`llm_stop()` interface if it hasn't grown for 120s. When it
-fires, `work()` returns
+The `example-scripts/bee.sh` `step()` function wraps `llm_run()` with a
+watchdog that samples the log file every 30s and calls `llm_stop()` if it
+hasn't grown for 120s. When it fires, `llm_run()` returns
 non-zero → ERR trap flips the row to `debugging` → queen advances.
 120s detection traded for 780s of otherwise-wasted budget.
 
@@ -287,7 +285,7 @@ non-zero → ERR trap flips the row to `debugging` → queen advances.
 | Phase | Doc | What |
 |-------|-----|------|
 | **Plan** | [plan.md](plan.md) | Discuss design → create tickets in LatticeCast PM |
-| **Prepare** | [prepare.md](prepare.md) | Write project's `.tmp/agentic-hive/config.sh` + scripts that source the skill |
+| **Prepare** | [prepare.md](prepare.md) | Write project's `.tmp/agentic-hive/.env` + scripts that source the skill |
 | **Run** | [running.md](running.md) | `bash run.sh`, `tmux attach`, `stop.sh`, recovery |
 
 ## Monitoring — the supervising agent opens a sibling monitor
@@ -311,11 +309,13 @@ Cons: ties up the main session's wake budget.
 
 ### Option B — separate `<project>-monitor` tmux using `llm.sh`
 
-Write a small project-local `monitor.sh` that sources the same config and
+Write a small project-local `monitor.sh` that sources the same `.env` and
 provider adapter as the bees. Its core loop is provider-neutral:
 
 ```bash
-source "${SCRIPT_DIR}/config.sh"
+set -a
+source "${SCRIPT_DIR}/.env"
+set +a
 source "${SCRIPT_DIR}/llm.sh"
 
 MONITOR_LOG="${PROJECT_DIR}/.tmp/out/monitor.log"
@@ -364,23 +364,25 @@ doesn't reprocess it.
 
 ## Composition pattern
 
-Every project that uses the hive writes its own `.tmp/agentic-hive/config.sh`
+Every project that uses the hive writes its own `.tmp/agentic-hive/.env`
 and the hive's local scripts source it + the skill's `pm_tool.sh`:
 
 ```bash
-# .tmp/agentic-hive/config.sh — per-project values only
-export LC_API="http://localhost:13491/api/v1"
-export LC_AUTH_HEADER="Authorization: Bearer lattice"
-export PM_USER="lattice"
-export TABLE_ID="pm"
-export WORKSPACE_ID="<uuid>"
-export PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-export SKILLS_DIR="${PROJECT_DIR}/.agent-skills"
-export LLM_PROVIDER="${LLM_PROVIDER:-${LLM_BACKEND:-claude}}" # or codex
-export LLM_PROJECT_DIR="${PROJECT_DIR}"
+# .tmp/agentic-hive/.env — per-project values only
+LC_API=http://localhost:13491/api/v1
+PM_USER=lattice
+PM_PASS=
+TABLE_ID=pm
+WORKSPACE_ID=<uuid>
+PROJECT_DIR=/abs/path/to/project
+SKILLS_DIR=/abs/path/to/project/.agent-skills
+LLM_PROVIDER=claude
+LLM_PROJECT_DIR=/abs/path/to/project
 
 # queen.sh / bee.sh
-source "${SCRIPT_DIR}/config.sh"
+set -a
+source "${SCRIPT_DIR}/.env"
+set +a
 source "${SKILLS_DIR}/developing/project-management/pm_tool.sh"
 # pm_*, lc_* are now available
 ```
@@ -393,7 +395,6 @@ source "${SKILLS_DIR}/developing/project-management/pm_tool.sh"
 |--------|------|
 | queen.sh | Pure rule-based: query PM → spawn → poll → cleanup |
 | bee.sh | Bash infra + LLM code: `source pm_tool.sh` for PM ops |
-| worker.sh | Stable ticket-work interface: `work()` and `work_stop()` |
 | llm.sh | Provider abstraction: validates, runs, and stops Claude or Codex |
 | format_claude_stream.py | Formats Claude stream-json as live log lines |
 | format_codex_stream.py | Formats `codex exec --json` JSONL as live log lines |

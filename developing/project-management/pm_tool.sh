@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # pm_tool.sh — PM domain helpers built on lc_api.sh.
 #
-# Composition:   config.sh + lc_api.sh + pm_*  (this file)
+# Composition:   .env + lc_api.sh + pm_*  (this file)
 # Source order in your script:
-#   source <project>/config.sh                # exports LC_API, LC_AUTH_HEADER, …
+#   set -a; source <project>/.env; set +a     # exports LC_API, PM_USER, PM_PASS, …
 #   source <skills>/developing/lattice-cast/lc_api.sh
 #   source <skills>/developing/project-management/pm_tool.sh
 #
@@ -11,7 +11,7 @@
 # you haven't sourced it yourself. The lattice-cast skill must live
 # next to project-management in the same .agent-skills/developing/ tree.
 #
-# Required env (set by your config.sh):
+# Required env (set by your .env):
 #   LC_API           e.g. http://localhost:13491/api/v1
 #   PM_USER          e.g. claude         (used for password-mode login)
 #   WORKSPACE_ID     pm table's workspace UUID
@@ -22,6 +22,14 @@
 
 set -uo pipefail
 
+PM_ENV_FILE="${PM_ENV_FILE:-${PROJECT_DIR:-$PWD}/.env}"
+if [ -f "${PM_ENV_FILE}" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "${PM_ENV_FILE}"
+    set +a
+fi
+
 # ── Locate sibling lc_api.sh and source it if not already ────────────────
 _PM_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if ! declare -F lc_status >/dev/null; then
@@ -30,8 +38,8 @@ if ! declare -F lc_status >/dev/null; then
 fi
 
 # ── Defaults ─────────────────────────────────────────────────────────────
-PM_USER="${PM_USER:-claude}"
-PM_PASS="${PM_PASS:-}"
+PM_USER="${PM_USER:-${LC_USER:-claude}}"
+PM_PASS="${PM_PASS:-${LC_PASS:-}}"
 TABLE_ID="${TABLE_ID:-pm}"
 PROJECT_DIR="${PROJECT_DIR:-$PWD}"
 PM_CACHE_DIR="${PROJECT_DIR}/.tmp/agentic-hive"

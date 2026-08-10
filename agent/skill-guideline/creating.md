@@ -35,3 +35,12 @@ allowed-tools: Read, Grep, Bash        # Auto-approved tools
 ## Scope
 
 `.agent-skills/` project > the active agent runtime's global skill directory
+
+## Bash Script Config Rule
+
+If a skill ships bash scripts, make `.env` the project-local config contract:
+
+- Load it with `set -a; source "${SCRIPT_DIR}/.env"; set +a`
+- Commit `.env.example` with every required variable
+- Keep derived defaults in script code
+- Do not create a parallel `config.sh` convention unless the user explicitly requires it

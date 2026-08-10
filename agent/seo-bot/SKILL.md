@@ -2,7 +2,7 @@
 name: agent/seo-bot
 description: Cross-product SEO article generator. Reads 3 CSVs (TA × promotion × product), loops the full Cartesian product, and spawns one fresh `claude -p` worker per article. Saves to LatticeCast articles table via lc_api.sh.
 argument-hint: run | status
-version: 0.3.0
+version: 0.3.1
 ---
 
 # seo-bot — Cross-Product Article Generator
@@ -15,10 +15,11 @@ just loops + uploads via `lc_api.sh`.
 
 ```
 Project root (e.g. seo-system/)
-├── config.sh              # LC_API, LC_AUTH_HEADER, ARTICLES_TABLE_ID, …
+├── .env                   # LC_API, LC_USER, LC_PASS, ARTICLES_TABLE_ID, …
+├── .env.example           # config template
 ├── lc_api.sh              # sourced from developing/lattice-cast skill
 └── seo-bot/
-    ├── run.sh             # entry point (sources config, calls orch)
+    ├── run.sh             # entry point (sources .env, calls orch)
     ├── orchestrator.sh    # pure shell — reads CSVs, loops product
     ├── worker.sh          # bash infra + `claude -p` for ONE article
     ├── audiences.csv      # TA personas
@@ -28,18 +29,19 @@ Project root (e.g. seo-system/)
 
 ## Config contract
 
-`config.sh` must export:
+`.env` must define:
 
 | Var | Purpose |
 |---|---|
 | `LC_API` | Base URL, e.g. `http://localhost:13491/api/v1` |
-| `LC_AUTH_HEADER` | `Authorization: Bearer <token>` |
+| `LC_USER` | Login user_name for `/login/password` |
+| `LC_PASS` | Login password for `/login/password` |
 | `ARTICLES_TABLE_ID` | Table ID for the articles table |
 | `TITLE_COLUMN_ID` | Column ID for the title field in articles |
 
 ## How it works
 
-1. `bash seo-bot/run.sh` → sources `config.sh`, runs orchestrator
+1. `bash seo-bot/run.sh` → sources `.env`, runs orchestrator
 2. **Orchestrator (rule-based, no LLM):**
    - Parse `audiences.csv`, `promotions.csv`, `products.csv` (header row + `title,description`)
    - Build cross product (3 × 4 × 2 = 24 typically; generic for any size)
@@ -53,7 +55,8 @@ Project root (e.g. seo-system/)
    - Worker writes ONE markdown file to `~/.tmp/article-<title>.md`
    - Bash creates row via `lc_row_create` then uploads doc via `lc_doc_write`
    - **No LLM in the upload path** — bash handles it deterministically
-4. Orchestrator logs `ALL_DONE` when count reached, else exits non-zero
+4. Orchestrator logs in, derives `LC_AUTH_HEADER` at runtime, and emits
+   `ALL_DONE` when count reached; otherwise exits non-zero
 
 Each worker is a fresh process — **no shared context** between articles.
 
@@ -101,8 +104,9 @@ off — already-uploaded titles are skipped via `lc_row_list`.
 ## Composition
 
 Sources `lc_api.sh` from `developing/lattice-cast` skill (the thin
-LatticeCast HTTP wrapper). Project `config.sh` provides `LC_API`,
-`LC_AUTH_HEADER`, and table/column IDs. The bot itself contains no
+LatticeCast HTTP wrapper). Project `.env` provides `LC_API`,
+`LC_USER`, `LC_PASS`, and table/column IDs. The bot logs in and derives
+`LC_AUTH_HEADER` at runtime. The bot itself contains no
 LatticeCast-specific code beyond the `lc_*` function calls.
 
 ## When to use this skill
@@ -124,6 +128,6 @@ seo-system project — pilot Claude reads `CLAUDE.md`, runs
 [example-scripts/audiences.csv](example-scripts/audiences.csv) [promotions.csv](example-scripts/promotions.csv) [products.csv](example-scripts/products.csv)
 
 Copy these into `<project>/seo-bot/`, replace CSVs with your real
-sources, ensure `<project>/config.sh` exports `LC_API`,
-`LC_AUTH_HEADER`, `ARTICLES_TABLE_ID`, `TITLE_COLUMN_ID`, and that
+sources, ensure `<project>/.env` defines `LC_API`,
+`LC_USER`, `LC_PASS`, `ARTICLES_TABLE_ID`, `TITLE_COLUMN_ID`, and that
 `lc_api.sh` is available to source. Then `bash seo-bot/run.sh`.
