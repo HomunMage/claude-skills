@@ -2,7 +2,7 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.38.3
+version: 0.38.4
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -65,7 +65,7 @@ Tickets follow a strict 3-level hierarchy: **Epic → Story → Issue**
 
 ```
 main
-└── story/{story-row-id}        ← one persistent branch/worktree per feature
+└── story/{story-row-id}        ← base: main, or its parent story branch
     ├── task-{row-id} commit    ← serial ticket commit on the story branch
     ├── bug-{row-id} commit
     └── final integrated verification commit (if needed)
@@ -76,6 +76,12 @@ at a time per story and commit directly to that story branch; they never make
 issue branches. This keeps related controller/store/UI work on one integrated
 code state. Merge the story into `main` only after all child tickets and the
 story-level verification pass.
+
+**Story dependency base rule:** if a story's PM `Parent` row is another
+`story`, create it from `story/story-<parent-row-id>`. If its parent is an
+`epic`, create it from `main`. Do not start a dependent story until its parent
+story branch exists; if that parent is already merged and its branch was
+cleaned up, create from `main` because it contains the same commits.
 
 ## Bee Workflow
 

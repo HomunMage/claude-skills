@@ -134,8 +134,34 @@ spawn_worker() {
   [ -n "$PARENT" ] || { log "ERROR: task ${RN} has no parent story"; return 1; }
   local STORY_BRANCH="story/story-${PARENT}"
   local STORY_WORKTREE="${PROJECT_DIR}/.tmp/story_${PARENT}"
+  local TYPE_ID PARENT_ID STORY_ROW DEPENDS_ON BASE_BRANCH="main"
+  TYPE_ID=$(col Type); PARENT_ID=$(col Parent)
+  STORY_ROW=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${PARENT}" -H "$AUTH")
+  DEPENDS_ON=$(printf '%s' "$STORY_ROW" | python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('${PARENT_ID}',''))" 2>/dev/null || true)
+
+  # A story whose Parent is another story depends on it.  Its branch starts
+  # from that parent story branch, preserving the dependency's integrated
+  # commits. A story whose Parent is an epic remains rooted at main.
+  if [ -n "$DEPENDS_ON" ]; then
+    local DEP_ROW DEP_TYPE DEP_STATUS
+    DEP_ROW=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${DEPENDS_ON}" -H "$AUTH")
+    DEP_TYPE=$(printf '%s' "$DEP_ROW" | python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('${TYPE_ID}',''))" 2>/dev/null || true)
+    if [ "$DEP_TYPE" = "story" ]; then
+      BASE_BRANCH="story/story-${DEPENDS_ON}"
+      if ! git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/${BASE_BRANCH}"; then
+        DEP_STATUS=$(printf '%s' "$DEP_ROW" | python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('$(col Status)',''))" 2>/dev/null || true)
+        if [ "$DEP_STATUS" = "merged" ]; then
+          BASE_BRANCH="main"
+        else
+          log "Deferred ${RN}: dependent story ${DEPENDS_ON} has no ready branch"
+          return 1
+        fi
+      fi
+    fi
+  fi
+
   git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/${STORY_BRANCH}" || \
-    git -C "$PROJECT_DIR" branch "$STORY_BRANCH" main
+    git -C "$PROJECT_DIR" branch "$STORY_BRANCH" "$BASE_BRANCH"
   if ! git -C "$STORY_WORKTREE" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git -C "$PROJECT_DIR" worktree add "$STORY_WORKTREE" "$STORY_BRANCH"
   fi
@@ -231,8 +257,9 @@ while [ "$CYCLE" -lt "$MAX_CYCLES" ]; do
     T=$(echo "$TASKS" | grep "^TASK${i}:" | sed "s/^TASK${i}: //")
     if [ -n "$T" ] && [ "$T" != "IDLE" ]; then
       RN=$(echo "$T" | grep -oP 'row_id=\K[0-9]+' || echo "")
-      spawn_worker "$i" "$T"
-      ACTIVE="${ACTIVE} ${i}"; RNS="${RNS} ${RN}"
+      if spawn_worker "$i" "$T"; then
+        ACTIVE="${ACTIVE} ${i}"; RNS="${RNS} ${RN}"
+      fi
     else
       log "W${i}: IDLE"
     fi
