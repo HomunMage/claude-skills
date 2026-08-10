@@ -80,6 +80,20 @@ Rules:
 - Stories are **never** directly implementable — they are groupings only
 - Issues are the only tickets assigned to workers
 
+### Mandatory Story Base Rule
+
+Before creating any story, decide its git base and record it in the story doc.
+`Parent` is reserved for the epic hierarchy; it must never encode a git
+dependency.
+
+- Independent story: `## Base Story\n- main`
+- Dependent story: `## Base Story\n- story-<upstream-story-row-id>`
+- A story may name exactly one base story. If it needs several prerequisites,
+  introduce an integration story and make that the single base.
+- Create dependent stories only after their base story row_id is known. The
+  Hive creates the dependent branch from that base branch and defers it until
+  the base is ready.
+
 ### Title vs Doc Rule
 - **Title is SHORT** — one line summary, max 80 chars. Example: `Add OAuth middleware`
 - **Doc has ALL the detail** — implementation instructions, files to change, decisions, acceptance criteria
@@ -163,6 +177,9 @@ After user approves, use `Skill(developing/project-management)`:
    
    ## Parent
    [{epic_key}] {epic_title}
+
+   ## Base Story
+   - main | story-<upstream-story-row-id>
    
    ## Spec
    <what this story delivers>

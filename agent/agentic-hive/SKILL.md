@@ -60,12 +60,12 @@ Tickets follow a strict 3-level hierarchy: **Epic → Story → Issue**
 | Level | Branch base | Merges into |
 |-------|-------------|-------------|
 | Epic  | (no branch — grouping only) | — |
-| Story | `main` | `main` (when all issues merged) |
+| Story | declared `Base Story` (`main` or another story) | `main` (when all issues merged) |
 | Issue | story branch | story branch |
 
 ```
 main
-└── story/{story-row-id}        ← base: main, or its parent story branch
+└── story/{story-row-id}        ← base: main, or its declared Base Story branch
     ├── task-{row-id} commit    ← serial ticket commit on the story branch
     ├── bug-{row-id} commit
     └── final integrated verification commit (if needed)
@@ -77,11 +77,12 @@ issue branches. This keeps related controller/store/UI work on one integrated
 code state. Merge the story into `main` only after all child tickets and the
 story-level verification pass.
 
-**Story dependency base rule:** if a story's PM `Parent` row is another
-`story`, create it from `story/story-<parent-row-id>`. If its parent is an
-`epic`, create it from `main`. Do not start a dependent story until its parent
-story branch exists; if that parent is already merged and its branch was
-cleaned up, create from `main` because it contains the same commits.
+**Story dependency base rule:** `Parent` always remains the epic row for PM
+hierarchy. Each story doc MUST declare `## Base Story` with exactly one value:
+`- main` or `- story-<row-id>`. A dependent story is created from the declared
+story branch. Do not start it until that branch exists; if it is already merged
+and its branch was cleaned up, create from `main` because it contains the same
+commits.
 
 ## Bee Workflow
 

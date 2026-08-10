@@ -134,14 +134,39 @@ spawn_worker() {
   [ -n "$PARENT" ] || { log "ERROR: task ${RN} has no parent story"; return 1; }
   local STORY_BRANCH="story/story-${PARENT}"
   local STORY_WORKTREE="${PROJECT_DIR}/.tmp/story_${PARENT}"
-  local TYPE_ID PARENT_ID STORY_ROW DEPENDS_ON BASE_BRANCH="main"
-  TYPE_ID=$(col Type); PARENT_ID=$(col Parent)
-  STORY_ROW=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${PARENT}" -H "$AUTH")
-  DEPENDS_ON=$(printf '%s' "$STORY_ROW" | python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('${PARENT_ID}',''))" 2>/dev/null || true)
+  local TYPE_ID STORY_DOC BASE_SPEC DEPENDS_ON BASE_BRANCH="main"
+  TYPE_ID=$(col Type)
+  STORY_DOC=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${PARENT}/doc" -H "$AUTH")
+  BASE_SPEC=$(printf '%s\n' "$STORY_DOC" | awk '
+    /^## Base Story[[:space:]]*$/ { found++; in_base=1; next }
+    in_base && /^## / { in_base=0 }
+    in_base {
+      if (/^[[:space:]]*$/) next
+      if (/^[[:space:]]*-[[:space:]]*(main|story-[0-9]+)[[:space:]]*$/) {
+        value=$0
+        sub(/^[[:space:]]*-[[:space:]]*/, "", value)
+        sub(/[[:space:]]*$/, "", value)
+        count++
+      } else {
+        invalid=1
+      }
+    }
+    END {
+      if (found != 1 || count != 1 || invalid) exit 1
+      print value
+    }
+  ')
+  case "$BASE_SPEC" in
+    main) ;;
+    story-[0-9]*) DEPENDS_ON=${BASE_SPEC#story-} ;;
+    *)
+      log "Deferred ${RN}: story ${PARENT} must declare exactly one valid ## Base Story value"
+      return 1
+      ;;
+  esac
 
-  # A story whose Parent is another story depends on it.  Its branch starts
-  # from that parent story branch, preserving the dependency's integrated
-  # commits. A story whose Parent is an epic remains rooted at main.
+  # Story hierarchy always uses Parent=epic. A story branch dependency is
+  # declared in its doc's `## Base Story` section as `- story-<row_id>`.
   if [ -n "$DEPENDS_ON" ]; then
     local DEP_ROW DEP_TYPE DEP_STATUS
     DEP_ROW=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${DEPENDS_ON}" -H "$AUTH")
