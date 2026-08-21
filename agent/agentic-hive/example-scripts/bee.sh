@@ -210,6 +210,9 @@ RULES:
 - ONLY write application code. Do NOT run curl commands to any API or service.
 - Status updates are handled by the bash wrapper — never update ticket status yourself.
 - Focus ONLY on reading code and implementing the ticket.
+- Browser/E2E identity: user=${HIVE_TEST_USER:-<not configured>},
+  password=${HIVE_TEST_PASS:-<not configured>}. When configured, use it and
+  do not substitute a user named in stale local debug instructions.
 - Commit message: <type>-${ROW_ID}: <short description> (e.g. task-42: add feature)"
 
 # ─── Pipeline ────────────────────────────────────────────────────────────────
