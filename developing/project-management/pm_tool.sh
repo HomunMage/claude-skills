@@ -48,8 +48,9 @@ mkdir -p "${PM_CACHE_DIR}"
 
 # ── Auth / token cache ───────────────────────────────────────────────────
 
-# pm_login → ensures LC_AUTH_HEADER is set; uses cached token if present.
-# In AUTH_REQUIRED=false mode the token == PM_USER (resolves to user_id).
+# pm_login → ensures LC_AUTH_HEADER is set through password login.
+# A PM user name is never a bearer token. An empty PM_PASS is still sent to
+# /login/password for accounts without a configured password.
 pm_login() {
     if [ -n "${LC_AUTH_HEADER:-}" ]; then return 0; fi
     local token=""
@@ -57,14 +58,14 @@ pm_login() {
         token=$(cat "${TOKEN_CACHE}")
     fi
     if [ -z "${token}" ]; then
-        # Try password login; fall back to using PM_USER as the token (dev mode)
-        if [ -n "${PM_PASS}" ]; then
-            token=$(LC_AUTH_HEADER="Authorization: Bearer ${PM_USER}" \
-                lc_login_password "${PM_USER}" "${PM_PASS}" 2>/dev/null) || token=""
-        fi
-        if [ -z "${token}" ]; then
-            token="${PM_USER}"
-        fi
+        token=$(lc_login_password "${PM_USER}" "${PM_PASS}") || {
+            echo "pm: password login failed for ${PM_USER}" >&2
+            return 1
+        }
+        [ -n "${token}" ] || {
+            echo "pm: password login returned no access token for ${PM_USER}" >&2
+            return 1
+        }
         printf '%s' "${token}" > "${TOKEN_CACHE}"
     fi
     export LC_AUTH_HEADER="Authorization: Bearer ${token}"

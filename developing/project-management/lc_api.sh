@@ -6,7 +6,7 @@
 # Source this; it only defines functions, no side effects.
 #   source /path/to/developing/project-management/lc_api.sh
 #
-# Caller MUST set before any lc_* call:
+# Caller MUST set before authenticated lc_* calls:
 #   LC_API           — base URL, e.g. http://localhost:13491/api/v1
 #   LC_AUTH_HEADER   — full header, e.g. "Authorization: Bearer <access_token>"
 # Optional:
@@ -76,7 +76,12 @@ lc_status() { _lc_curl GET "/status"; }
 lc_login_password() {
     local body; body=$(_lc_json "$(printf '{"user_name":"%s","password":"%s"}' "$1" "$2")")
     local out rc
-    out=$(_lc_curl POST "/login/password" "$body" "Content-Type: application/json")
+    # Login is public. Do not fabricate a bearer token from a user name:
+    # obtain a real token here, then callers set LC_AUTH_HEADER.
+    _lc_throttle
+    out=$(curl -sf -X POST "${LC_API:?LC_API must be set (e.g. http://localhost:13491/api/v1)}/login/password" \
+        -H "Content-Type: application/json" \
+        --data-binary "@${body}")
     rc=$?
     rm -f "$body"
     [ "$rc" -ne 0 ] && return "$rc"
