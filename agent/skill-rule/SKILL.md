@@ -1,7 +1,7 @@
 ---
-name: agent/skill-guideline
-description: Guide for creating portable agent skills (SKILL.md). Use when building, structuring, or debugging reusable skills and commands for coding agents.
-version: 0.7.0
+name: agent/skill-rule
+description: Rule for creating portable agent skills (SKILL.md). Use when building, structuring, or debugging reusable skills and commands for coding agents.
+version: 0.7.1
 ---
 
 # Skills = Library Dependencies

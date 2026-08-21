@@ -1,10 +1,10 @@
 ## agent-skills
 
 - `agent/agentic-hive`
-- `agent/assistant`
 - `agent/instructions-creating`
 - `agent/seo-bot`
-- `agent/skill-guideline`
+- `agent/skill-rule`
+- `agent/swarm-cluster`
 - `business/interview`
 - `business/startup`
 - `content/how-to-guides`
