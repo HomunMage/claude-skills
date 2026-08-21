@@ -2,7 +2,7 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.38.5
+version: 0.39.0
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -287,78 +287,19 @@ non-zero → ERR trap flips the row to `debugging` → queen advances.
 | **Plan** | [plan.md](plan.md) | Discuss design → create tickets in LatticeCast PM |
 | **Prepare** | [prepare.md](prepare.md) | Write project's `.tmp/agentic-hive/.env` + scripts that source the skill |
 | **Run** | [running.md](running.md) | `bash run.sh`, `tmux attach`, `stop.sh`, recovery |
+| **Monitor** | [monitor.md](monitor.md) | Required supervising-agent monitoring; select a provider delivery method |
 
-## Monitoring — the supervising agent opens a sibling monitor
+## Monitoring
 
-**The hive itself does not self-supervise.** Whenever the supervising
-agent (not a bee) calls `bash run.sh`, it ALSO starts an independent
-monitoring loop. That loop polls every ~3 minutes and reports whether the
-hive is making progress.
-
-Two equivalent ways to spawn the monitor — pick one based on how you
-want results delivered:
-
-### Option A — use the host agent's scheduler (simplest)
-
-If the host agent supports scheduled wakeups, schedule a check every 180
-seconds that reads `.tmp/out/queen.log`, the bee logs, and PM status, then
-re-schedules itself. Stop when queen says `ALL DONE!`.
-
-Pros: no extra processes; reports inline in your conversation.
-Cons: ties up the main session's wake budget.
-
-### Option B — separate `<project>-monitor` tmux using `llm.sh`
-
-Write a small project-local `monitor.sh` that sources the same `.env` and
-provider adapter as the bees. Its core loop is provider-neutral:
-
-```bash
-set -a
-source "${SCRIPT_DIR}/.env"
-set +a
-source "${SCRIPT_DIR}/llm.sh"
-
-MONITOR_LOG="${PROJECT_DIR}/.tmp/out/monitor.log"
-MONITOR_PROMPT="Read the queen and worker logs and PM status. Report ticket,
-step, and elapsed time. If the queue is finished, print STOP_MONITOR."
-
-while true; do
-  llm_run "$MONITOR_PROMPT" "$MONITOR_LOG"
-  grep -q STOP_MONITOR "$MONITOR_LOG" && break
-  sleep 180
-done
-```
-
-Pros: independent of main session; persists across `/clear`.
-Cons: extra tmux + an LLM provider call every 3 min.
-
-### What the monitor checks
-
-| Signal | What it means | Action |
-|--------|---------------|--------|
-| `3+ Still working` lines on the same step | LLM iterating on lint/test or stuck | flag, keep watching |
-| Bee step `debugging` | tests failed | flag, escalate after 2 cycles |
-| `TIMEOUT` in queen log | 900s budget hit | check `git log` — if the merge landed, mark PM `merged` manually |
-| `ALL DONE!` and queue empty | hive finished | print summary table, stop the monitor |
-
-### Recovery rule (TIMEOUT after commit)
-
-The queen times out bees at 900s. If the bee had already
-committed before the timeout, PM status will be stuck at `testing`/`review`
-even though the work is in `main`. The monitor MUST verify with
-`git log --oneline -5` and PUT the ticket to `merged` so the next cycle
-doesn't reprocess it.
-
-### When NOT to spawn the monitor
-
-- Single-ticket runs you're attaching to interactively.
-- Dry-runs / debugging the hive scripts themselves.
+The hive does not self-supervise. Read [monitor.md](monitor.md) whenever a
+hive run is started, unless it is a single interactive ticket or a dry-run.
+The supervising agent must choose a delivery method that reports status into
+the conversation and prove the first scheduled report arrives.
 
 ## Key Dependencies
 
-- `Skill(developing/lattice-cast)` — provides `lc_api.sh` (thin curl wrappers, generic).
-- `Skill(developing/project-management)` — provides `pm_tool.sh` (PM domain
-  helpers; auto-sources `lc_api.sh` from the sibling skill).
+- `Skill(developing/project-management)` — provides `pm_tool.sh` and its
+  bundled `lc_api.sh` HTTP wrapper.
 - `Skill(developing/programming)` — test/format/lint workflow.
 - LatticeCast PM — ticket tracking, doc storage (MinIO).
 
@@ -399,3 +340,4 @@ source "${SKILLS_DIR}/developing/project-management/pm_tool.sh"
 | format_claude_stream.py | Formats Claude stream-json as live log lines |
 | format_codex_stream.py | Formats `codex exec --json` JSONL as live log lines |
 | start.sh / stop.sh | tmux session lifecycle |
+| monitor-cron.sh | cron-safe deterministic monitor + Codex chat resume |

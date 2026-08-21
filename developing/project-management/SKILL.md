@@ -3,24 +3,27 @@ name: developing/project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal library used by developing/programming, agent/agentic-hive, and developing/onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.10.2
+version: 0.11.0
 ---
 
 # LatticeCast Project Management
 
-> **v0.8.0**: Refactored as a thin layer over `developing/lattice-cast` (`lc_api.sh`).
-> The PM-specific helpers (`pm_login`, `pm_cache_cols`, `pm_set_status`,
-> `pm_create_ticket`, `pm_get_todo_tasks`, `pm_*_doc`) live in `pm_tool.sh`
-> and source `lc_api.sh` from the sibling skill. Compose at the consumer:
+> `pm_tool.sh` is the PM domain layer over the bundled `lc_api.sh` HTTP
+> wrapper. The PM-specific helpers
+> (`pm_login`, `pm_cache_cols`, `pm_set_status`, `pm_create_ticket`,
+> `pm_get_todo_tasks`, `pm_*_doc`) compose both layers for consumers:
 >
 > ```bash
 > set -a; source <project>/.env; set +a   # exports LC_API, PM_USER, TABLE_ID, …
-> source <skills>/developing/project-management/pm_tool.sh   # auto-sources lc_api.sh
+> source <skills>/developing/project-management/pm_tool.sh   # auto-sources bundled lc_api.sh
 > pm_login; pm_get_todo_tasks
 > ```
 
 
 Internal skill providing PM operations. Other skills compose via `Skill(developing/project-management)`.
+
+For a non-PM consumer that only needs LatticeCast HTTP routes, source this
+skill's bundled `lc_api.sh`. Do not depend on a separate lattice-cast skill.
 
 **URL**: `http://localhost:13491`
 

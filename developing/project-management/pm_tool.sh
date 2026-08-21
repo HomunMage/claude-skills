@@ -4,12 +4,10 @@
 # Composition:   .env + lc_api.sh + pm_*  (this file)
 # Source order in your script:
 #   set -a; source <project>/.env; set +a     # exports LC_API, PM_USER, PM_PASS, …
-#   source <skills>/developing/lattice-cast/lc_api.sh
 #   source <skills>/developing/project-management/pm_tool.sh
 #
-# pm_tool.sh sources lc_api.sh automatically from the sibling skill if
-# you haven't sourced it yourself. The lattice-cast skill must live
-# next to project-management in the same .agent-skills/developing/ tree.
+# pm_tool.sh sources its bundled lc_api.sh automatically if the caller has not
+# already sourced it.
 #
 # Required env (set by your .env):
 #   LC_API           e.g. http://localhost:13491/api/v1
@@ -30,11 +28,11 @@ if [ -f "${PM_ENV_FILE}" ]; then
     set +a
 fi
 
-# ── Locate sibling lc_api.sh and source it if not already ────────────────
+# ── Locate bundled lc_api.sh and source it if not already ────────────────
 _PM_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if ! declare -F lc_status >/dev/null; then
     # shellcheck disable=SC1091
-    source "${_PM_TOOL_DIR}/../lattice-cast/lc_api.sh"
+    source "${_PM_TOOL_DIR}/lc_api.sh"
 fi
 
 # ── Defaults ─────────────────────────────────────────────────────────────

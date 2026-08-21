@@ -4,6 +4,15 @@
 
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/.env"
+if [ -f "${ENV_FILE}" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+fi
+
 PROJECT_DIR="${1:?Usage: checkpoint.sh <project_dir> [message]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 MSG="${2:-auto checkpoint}"

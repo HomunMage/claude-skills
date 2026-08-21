@@ -13,7 +13,9 @@ if [ -f "${ENV_FILE}" ]; then
   source "${ENV_FILE}"
   set +a
 fi
-source "${SEO_DIR}/lc_api.sh"
+: "${SKILLS_DIR:?SKILLS_DIR must be set in .env}"
+# shellcheck disable=SC1091
+source "${SKILLS_DIR}/developing/project-management/lc_api.sh"
 
 A_TITLE="${1:?a_title required}";  A_DESC="${2:?a_desc required}"
 B_TITLE="${3:?b_title required}";  B_DESC="${4:?b_desc required}"

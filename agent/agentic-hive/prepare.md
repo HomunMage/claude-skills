@@ -64,6 +64,7 @@ PROJECT_DIR=/abs/path/to/project
 SKILLS_DIR=/abs/path/to/project/.agent-skills
 LLM_PROVIDER=claude
 LLM_PROJECT_DIR=/abs/path/to/project
+MONITOR_CODEX_SESSION_ID=
 # CLAUDE_MODEL=sonnet
 # CODEX_MODEL=gpt-5.6-codex
 ```
@@ -77,8 +78,15 @@ set -a
 source "${SCRIPT_DIR}/.env"
 set +a
 source "${SKILLS_DIR}/developing/project-management/pm_tool.sh"
-# pm_tool.sh auto-sources lc_api.sh from developing/lattice-cast
+# pm_tool.sh auto-sources its bundled lc_api.sh
 ```
+
+### 2h. Monitor configuration
+
+Read [monitor.md](monitor.md) before selecting a monitor. For the Codex cron
+bridge, write `monitor-cron.sh` from the example and set
+`MONITOR_CODEX_SESSION_ID`. Do not automate terminal input with `send-keys` or
+`C-m`.
 
 ## Customization points per project
 
@@ -105,7 +113,8 @@ When writing scripts, tailor these to the specific project:
 ├── bee.sh                  ← bash infra + LLM code
 ├── llm.sh                  ← Claude/Codex provider adapter
 ├── format_claude_stream.py ← Claude stream-json formatter
-└── format_codex_stream.py  ← Codex JSONL formatter
+├── format_codex_stream.py  ← Codex JSONL formatter
+└── monitor-cron.sh         ← optional cron → Codex resume bridge
 ```
 
 PM/LC helpers (`pm_*`, `lc_*`) live in the skill submodule, not in

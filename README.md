@@ -14,7 +14,6 @@
 - `developing/debug-frontend`
 - `developing/e2e`
 - `developing/fastapi`
-- `developing/lattice-cast`
 - `developing/onboarding`
 - `developing/programming`
 - `developing/project-management`

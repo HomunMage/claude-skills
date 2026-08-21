@@ -7,6 +7,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/.env"
+if [ -f "${ENV_FILE}" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+fi
+
 PROJECT_DIR="${1:?Usage: bash start.sh <project_dir> [max_cycles] [num_workers]}"
 PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 MAX_CYCLES="${2:-50}"
@@ -14,7 +22,7 @@ NUM_WORKERS="${3:-2}"
 SESSION="$(basename "$PROJECT_DIR")"
 
 # Validate LatticeCast PM is running
-if ! curl -s http://localhost:13491/api/v1/status 2>/dev/null | grep -q '"ok"'; then
+if ! curl -s "${LC_API%/api/v1}/status" 2>/dev/null | grep -q '"ok"'; then
   echo "ERROR: LatticeCast PM is not running."
   echo "Start it: cd <LatticeCast-repo> && docker compose up -d backend frontend"
   echo "Or clone: git clone https://github.com/LatticeMage/LatticeCast.git"

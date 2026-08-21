@@ -38,9 +38,13 @@ allowed-tools: Read, Grep, Bash        # Auto-approved tools
 
 ## Bash Script Config Rule
 
-If a skill ships bash scripts, make `.env` the project-local config contract:
+If a skill ships executable bash scripts, make `.env` the project-local config contract:
 
 - Load it with `set -a; source "${SCRIPT_DIR}/.env"; set +a`
 - Commit `.env.example` with every required variable
 - Keep derived defaults in script code
 - Do not create a parallel `config.sh` convention unless the user explicitly requires it
+
+Sourced libraries may stay side-effect-free when their documented caller loads
+`.env` first. Do not make a reusable wrapper guess a project root just to load
+configuration implicitly.

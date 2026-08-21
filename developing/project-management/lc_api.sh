@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# lc_api.sh — Thin curl wrappers around the LatticeCast HTTP API.
-# One function per route. No domain knowledge, no caching, no magic.
+# lc_api.sh — Internal HTTP foundation for developing/project-management.
+# Thin curl wrappers: one function per route; no PM domain rules, caching, or
+# hidden side effects. pm_tool.sh sources this file to add PM workflows.
 #
 # Source this; it only defines functions, no side effects.
-#   source /path/to/developing/lattice-cast/lc_api.sh
+#   source /path/to/developing/project-management/lc_api.sh
 #
 # Caller MUST set before any lc_* call:
 #   LC_API           — base URL, e.g. http://localhost:13491/api/v1

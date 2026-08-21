@@ -17,7 +17,7 @@ just loops + uploads via `lc_api.sh`.
 Project root (e.g. seo-system/)
 ├── .env                   # LC_API, LC_USER, LC_PASS, ARTICLES_TABLE_ID, …
 ├── .env.example           # config template
-├── lc_api.sh              # sourced from developing/lattice-cast skill
+├── .agent-skills/         # contains developing/project-management/lc_api.sh
 └── seo-bot/
     ├── run.sh             # entry point (sources .env, calls orch)
     ├── orchestrator.sh    # pure shell — reads CSVs, loops product
@@ -38,6 +38,7 @@ Project root (e.g. seo-system/)
 | `LC_PASS` | Login password for `/login/password` |
 | `ARTICLES_TABLE_ID` | Table ID for the articles table |
 | `TITLE_COLUMN_ID` | Column ID for the title field in articles |
+| `SKILLS_DIR` | Absolute path to the project's `.agent-skills` submodule |
 
 ## How it works
 
@@ -103,8 +104,8 @@ off — already-uploaded titles are skipped via `lc_row_list`.
 
 ## Composition
 
-Sources `lc_api.sh` from `developing/lattice-cast` skill (the thin
-LatticeCast HTTP wrapper). Project `.env` provides `LC_API`,
+Sources `lc_api.sh` from `developing/project-management` (the bundled thin
+LatticeCast HTTP wrapper). Project `.env` provides `SKILLS_DIR`, `LC_API`,
 `LC_USER`, `LC_PASS`, and table/column IDs. The bot logs in and derives
 `LC_AUTH_HEADER` at runtime. The bot itself contains no
 LatticeCast-specific code beyond the `lc_*` function calls.
@@ -129,5 +130,5 @@ seo-system project — pilot Claude reads `CLAUDE.md`, runs
 
 Copy these into `<project>/seo-bot/`, replace CSVs with your real
 sources, ensure `<project>/.env` defines `LC_API`,
-`LC_USER`, `LC_PASS`, `ARTICLES_TABLE_ID`, `TITLE_COLUMN_ID`, and that
-`lc_api.sh` is available to source. Then `bash seo-bot/run.sh`.
+`LC_USER`, `LC_PASS`, `ARTICLES_TABLE_ID`, `TITLE_COLUMN_ID`, and
+`SKILLS_DIR`. Then `bash seo-bot/run.sh`.

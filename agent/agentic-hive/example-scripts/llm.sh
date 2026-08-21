@@ -10,6 +10,14 @@
 # supported as a compatibility alias for existing hive configurations.
 
 LLM_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${LLM_SCRIPT_DIR}/.env"
+if [ -f "${ENV_FILE}" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${ENV_FILE}"
+  set +a
+fi
+
 LLM_PROVIDER="${LLM_PROVIDER:-${LLM_BACKEND:-claude}}"
 LLM_BACKEND="${LLM_PROVIDER}"
 LLM_PROJECT_DIR="${LLM_PROJECT_DIR:-${PROJECT_DIR:-$PWD}}"

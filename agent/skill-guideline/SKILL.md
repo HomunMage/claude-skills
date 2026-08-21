@@ -1,7 +1,7 @@
 ---
 name: agent/skill-guideline
 description: Guide for creating portable agent skills (SKILL.md). Use when building, structuring, or debugging reusable skills and commands for coding agents.
-version: 0.6.1
+version: 0.7.0
 ---
 
 # Skills = Library Dependencies
@@ -84,7 +84,7 @@ bash: pm_set_status "done"            ← deterministic
 4. **Split by load frequency.** Always → SKILL.md. Once → setup.md. On-demand → reference.md.
 5. **Sub-files = zero context cost** until explicitly read.
 6. **Rule-based for infra, LLM for code.** Never ask LLM to do git, PM, or curl for status updates.
-7. **Bash script config uses `.env`.** For any skill that ships shell scripts, load project-local config from `.env`, commit a `.env.example`, and avoid inventing `config.sh` one-offs.
+7. **Executable bash scripts use `.env`.** Every executable script shipped by a skill loads its script-local or project-local `.env`; commit a matching `.env.example`, and avoid `config.sh` one-offs. A sourced library may remain side-effect-free only when its caller loads `.env` first and its public contract says so.
 8. **精簡但深邃。AI秒懂。** Every line carries weight. No filler.
 
 See [creating.md](creating.md) for syntax/frontmatter reference.
