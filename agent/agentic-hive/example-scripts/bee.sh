@@ -149,7 +149,10 @@ done
 # additional specialist skills; the complete skill folder is included so the
 # worker reads its references, not only the SKILL.md heading.
 read_skill_first() {
-  local skill="$1" skill_dir="${SKILLS_DIR}/${skill}"
+  # Split these assignments: with set -u, Bash expands skill_dir before
+  # the same local command assigns skill.
+  local skill="$1"
+  local skill_dir="${SKILLS_DIR}/${skill}"
   [ -d "$skill_dir" ] || { log "ERROR: required skill missing: ${skill}"; exit 1; }
   CONTEXT="${CONTEXT}
 ===== REQUIRED SKILL FIRST: ${skill} ====="
