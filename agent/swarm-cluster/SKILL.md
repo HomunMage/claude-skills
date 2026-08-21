@@ -1,7 +1,7 @@
 ---
 name: agent/swarm-cluster
 description: Persistent cluster that delegates goal-scoped swarms to agentic hives; use for multi-initiative autonomous delivery and recovery
-version: 0.6.4
+version: 0.6.5
 ---
 
 # swarm-cluster
@@ -90,12 +90,10 @@ tmux new-session -d -s "swarm-${SWARM}" -c "$PROJECT_DIR" \
 
 ### Inspect and stop
 
-From `cluster-main`, open a dedicated pane for the swarm. Do not attach the
-cluster's own terminal directly:
+From `cluster-main`, read the swarm's pane directly. Do not use `tmux attach`:
 
 ```bash
-tmux split-window -h -t cluster-main -c "$PROJECT_DIR" \
-  "TMUX= tmux attach -t swarm-${SWARM}"
+tmux capture-pane -p -t "swarm-${SWARM}:0.0" -S -200
 ```
 
 To stop work, request the swarm to stop every hive it owns first. The swarm
