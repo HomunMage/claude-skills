@@ -92,6 +92,111 @@ pm_col() {
     python3 -c "import json; print(json.load(open('${COL_CACHE}')).get('$1',''))"
 }
 
+# pm_row_type ROW_ID → ticket Type value (epic, story, task, or bug).
+pm_row_type() {
+    local rid="$1" type_col
+    pm_login
+    type_col=$(pm_col Type)
+    lc_row_get "${TABLE_ID}" "${rid}" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('${type_col}',''))"
+}
+
+# pm_require_story_parent ISSUE_ROW_ID → echoes the verified parent story row_id.
+# Fails closed unless ISSUE_ROW_ID is a task/bug whose Parent points to a
+# currently readable row with Type=story. This is the one dependency boundary
+# used by both ticket creation and bee dispatch.
+pm_require_story_parent() {
+    local issue_id="$1" type_col parent_col issue_json issue_type parent_id story_type
+    pm_login
+    type_col=$(pm_col Type)
+    parent_col=$(pm_col Parent)
+    [ -n "${type_col}" ] && [ -n "${parent_col}" ] || {
+        echo "pm: PM table requires Type and Parent columns" >&2
+        return 1
+    }
+    issue_json=$(lc_row_get "${TABLE_ID}" "${issue_id}") || return 1
+    issue_type=$(printf '%s' "${issue_json}" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('${type_col}',''))")
+    case "${issue_type}" in
+        task|bug) ;;
+        *)
+            echo "pm: row ${issue_id} is not an executable task/bug" >&2
+            return 1
+            ;;
+    esac
+    parent_id=$(printf '%s' "${issue_json}" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('${parent_col}',''))")
+    [[ "${parent_id}" =~ ^[0-9]+$ ]] || {
+        echo "pm: ${issue_type}-${issue_id} has no numeric Parent story row_id" >&2
+        return 1
+    }
+    story_type=$(pm_row_type "${parent_id}") || return 1
+    [ "${story_type}" = "story" ] || {
+        echo "pm: ${issue_type}-${issue_id} parent ${parent_id} is ${story_type:-missing}, not story" >&2
+        return 1
+    }
+    printf '%s\n' "${parent_id}"
+}
+
+# pm_read_ticket_doc ROW_ID → reads the MinIO-backed PM document for any row.
+pm_read_ticket_doc() {
+    pm_login
+    lc_doc_read "${TABLE_ID}" "$1"
+}
+
+# pm_require_hive_context ISSUE_ROW_ID → verifies issue + parent story docs,
+# then echoes the parent story row_id. The required headings match the hive
+# planning gate; missing evidence is a planning error, never an LLM prompt.
+pm_require_hive_context() {
+    local issue_id="$1" story_id issue_doc story_doc heading
+    story_id=$(pm_require_story_parent "${issue_id}") || return 1
+    issue_doc=$(pm_read_ticket_doc "${issue_id}") || return 1
+    story_doc=$(pm_read_ticket_doc "${story_id}") || return 1
+    for heading in \
+        '## Current Behavior and Evidence' \
+        '## Root Cause' \
+        '## Target Invariants' \
+        '## End-to-End Data Flow' \
+        '## Legacy Paths to Remove or Replace' \
+        '## Exact Scope' \
+        '## Acceptance Matrix'; do
+        [[ "${issue_doc}" == *"${heading}"* ]] || {
+            echo "pm: issue ${issue_id} missing ${heading}" >&2
+            return 1
+        }
+    done
+    for heading in \
+        '## Base Story' \
+        '## Context Read' \
+        '## Current Behavior and Evidence' \
+        '## Root Cause' \
+        '## Target Invariants and Data Flow' \
+        '## Legacy Paths to Remove or Replace' \
+        '## Issue Dependency and Integration Plan'; do
+        [[ "${story_doc}" == *"${heading}"* ]] || {
+            echo "pm: story ${story_id} missing ${heading}" >&2
+            return 1
+        }
+    done
+    printf '%s\n' "${story_id}"
+}
+
+# pm_validate_issue_parents ISSUE_ROW_ID [...] — plan-phase hierarchy audit.
+# The planner calls this after creating every issue in a plan and before it
+# announces the plan ready. It deliberately reuses the same parent rule that
+# dispatch uses, so ticket creation and bee execution cannot drift.
+pm_validate_issue_parents() {
+    local issue_id story_id
+    [ "$#" -gt 0 ] || {
+        echo "pm: no issue row_ids supplied for parent audit" >&2
+        return 1
+    }
+    for issue_id in "$@"; do
+        story_id=$(pm_require_story_parent "${issue_id}") || return 1
+        printf 'pm: verified issue %s → story %s\n' "${issue_id}" "${story_id}" >&2
+    done
+}
+
 # ── Row helpers ──────────────────────────────────────────────────────────
 
 # pm_set_status ROW_ID STATUS — patches the Status field on the given row.
@@ -108,7 +213,8 @@ pm_set_status() {
 }
 
 # pm_create_ticket TITLE TYPE PRIORITY [PARENT_RN]
-# Echoes the new row_id on success.
+# Echoes the new row_id on success. task/bug creation fails unless Parent is a
+# readable row whose Type is story.
 pm_create_ticket() {
     pm_login
     local title="$1" type="${2:-task}" priority="${3:-medium}" parent="${4:-}"
@@ -120,6 +226,21 @@ pm_create_ticket() {
     local SD;  SD=$(pm_col "Start Date")
     local DD;  DD=$(pm_col "Due Date")
     local today; today=$(date -u +%Y-%m-%d)
+
+    case "${type}" in
+        task|bug)
+            [ -n "${parent}" ] || {
+                echo "pm: ${type} tickets require Parent=<story_row_id>" >&2
+                return 1
+            }
+            local parent_type
+            parent_type=$(pm_row_type "${parent}") || return 1
+            [ "${parent_type}" = "story" ] || {
+                echo "pm: ${type} parent ${parent} is ${parent_type:-missing}, not story" >&2
+                return 1
+            }
+            ;;
+    esac
 
     local row_data
     row_data=$(python3 -c "

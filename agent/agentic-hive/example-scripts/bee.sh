@@ -23,6 +23,7 @@ export LLM_PROVIDER="${LLM_PROVIDER:-${LLM_BACKEND:-claude}}"
 # Keep provider commands in that same worktree so each ticket sees every prior
 # commit for its story.
 export LLM_PROJECT_DIR="${LLM_PROJECT_DIR:-$PROJECT_DIR}"
+source "${SKILLS_DIR}/developing/project-management/pm_tool.sh"
 WORKER_ID="${2:?Worker ID required}"
 TASK_DESC="${3:-}"
 PM_USER="${PM_USER:-claude}"
@@ -33,64 +34,11 @@ PM_PASS="${PM_PASS:-}"
 ROW_ID=$(echo "$TASK_DESC" | grep -oP 'row_id=\K[0-9]+' || echo "0")
 LOG_FILE="${PROJECT_DIR}/.tmp/out/worker_${WORKER_ID}_${ROW_ID}.log"
 GIT_LOCK="${PROJECT_DIR}/_git.lock"
-PM_URL="${LC_API%/api/v1}"
-TABLE_ID="${TABLE_ID:-}"
-
-if [ -z "${LC_AUTH_HEADER:-}" ]; then
-  PM_TOKEN=""
-  if [ -n "${PM_PASS}" ]; then
-    PM_TOKEN=$(curl -s -X POST "${PM_URL}/api/v1/login/password" \
-      -H "Content-Type: application/json" \
-      -d "{\"user_name\":\"${PM_USER}\",\"password\":\"${PM_PASS}\"}" \
-      | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || echo "")
-  fi
-  [ -n "${PM_TOKEN}" ] || PM_TOKEN="${PM_USER}"
-  export LC_AUTH_HEADER="Authorization: Bearer ${PM_TOKEN}"
-fi
 
 mkdir -p "${PROJECT_DIR}/.tmp/out"
 
 log() {
   echo "$(date '+%H:%M:%S') [W${WORKER_ID}] $1" | tee -a "$LOG_FILE"
-}
-
-# ─── PM helpers (pure bash, no LLM) ─────────────────────────────────────────
-STATUS_COL=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/agentic-hive/_col_cache.json')).get('Status',''))" 2>/dev/null || echo "")
-
-pm_set_status() {
-  local new_status="$1"
-  [ -z "$ROW_ID" ] || [ -z "$TABLE_ID" ] && return
-  local cur
-  cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_ID}" \
-    -H "$LC_AUTH_HEADER" | \
-    python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['row_data']))" 2>/dev/null)
-  local updated
-  updated=$(echo "$cur" | python3 -c "import sys,json; d=json.load(sys.stdin); d['${STATUS_COL}']='${new_status}'; print(json.dumps(d))")
-  curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_ID}" \
-    -H "$LC_AUTH_HEADER" -H "Content-Type: application/json" \
-    -d "{\"row_data\": ${updated}}" > /dev/null
-  log "Status → ${new_status} (row ${ROW_ID})"
-}
-
-pm_read_doc() {
-  [ -z "$ROW_ID" ] || [ -z "$TABLE_ID" ] && return
-  curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_ID}/doc" \
-    -H "$LC_AUTH_HEADER" 2>/dev/null || echo ""
-}
-
-pm_append_doc() {
-  local msg="$1"
-  [ -z "$ROW_ID" ] || [ -z "$TABLE_ID" ] && return
-  local ts
-  ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  local current
-  current=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_ID}/doc" \
-    -H "$LC_AUTH_HEADER" 2>/dev/null || echo "")
-  local updated="${current}
-- ${ts} ${msg}"
-  curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_ID}/doc" \
-    -H "$LC_AUTH_HEADER" -H "Content-Type: text/plain" \
-    --data-raw "$updated" > /dev/null
 }
 
 step() {
@@ -140,24 +88,14 @@ step() {
 }
 
 # If any step fails, signal BLOCKED and exit
-trap 'log "Pipeline failed."; pm_set_status "debugging"; pm_append_doc "W${WORKER_ID} BLOCKED — pipeline failed"; exit 1' ERR
+trap 'log "Pipeline failed."; pm_set_status "${ROW_ID}" "debugging"; pm_append_doc "${ROW_ID}" "W${WORKER_ID} BLOCKED — pipeline failed"; exit 1' ERR
 
 log "Worker ${WORKER_ID} starting..."
 [ -n "$TASK_DESC" ] && log "Task: ${TASK_DESC}"
 
-# ─── Phase 1: Clean ─────────────────────────────────────────────────────────
-log "Cleaning working tree..."
+# ─── Phase 1: Extract row_id from task desc ────────────────────────────────
 cd "$PROJECT_DIR" || exit 1
-
-if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-  git reset --hard HEAD 2>&1 | tee -a "$LOG_FILE"
-  git clean -fd 2>&1 | tee -a "$LOG_FILE"
-  log "Clean slate restored."
-fi
-
-# ─── Phase 2: Extract row_id from task desc ─────────────────────────────
 ROW_ID=$(echo "$TASK_DESC" | grep -oP 'row_id=\K[0-9]+' || echo "")
-PARENT_RN=$(echo "$TASK_DESC" | grep -oP 'parent=\K[0-9]+' || echo "")
 
 if [ -z "$ROW_ID" ]; then
   log "ERROR: No row_id in task desc"
@@ -165,22 +103,37 @@ if [ -z "$ROW_ID" ]; then
   exit 1
 fi
 
-EXPECTED_STORY_BRANCH="story/story-${PARENT_RN}"
-if [ -z "$PARENT_RN" ] || [ "$(git branch --show-current)" != "$EXPECTED_STORY_BRANCH" ]; then
-  log "ERROR: bee must run in persistent ${EXPECTED_STORY_BRANCH} story worktree"
-  pm_set_status "debugging"
+# ─── Phase 2: Rule-based PM context gate (before any worktree mutation) ────
+# pm_tool.sh uses lc_api.sh's curl wrapper. It rejects an orphan issue, a
+# non-story parent, or a ticket/story document missing the required design
+# evidence. No LLM sees or compensates for an invalid ticket.
+if ! PARENT_RN=$(pm_require_hive_context "${ROW_ID}"); then
+  log "ERROR: invalid hive ticket context; refusing claim"
+  pm_set_status "${ROW_ID}" "debugging"
+  pm_append_doc "${ROW_ID}" "W${WORKER_ID} BLOCKED — missing verified story parent or required planning context"
   exit 1
 fi
+EXPECTED_STORY_BRANCH="story/story-${PARENT_RN}"
+if [ "$(git branch --show-current)" != "$EXPECTED_STORY_BRANCH" ]; then
+  log "ERROR: verified parent requires ${EXPECTED_STORY_BRANCH} story worktree"
+  pm_set_status "${ROW_ID}" "debugging"
+  exit 1
+fi
+TICKET_DOC=$(pm_read_ticket_doc "${ROW_ID}")
+STORY_DOC=$(pm_read_ticket_doc "${PARENT_RN}")
+log "Issue ${ROW_ID} and parent story ${PARENT_RN} docs verified"
 
-# ─── Phase 3: Set in_progress IMMEDIATELY (bash, not LLM) ──────────────────
-pm_set_status "in_progress"
-pm_append_doc "Picked up by W${WORKER_ID}"
+# ─── Phase 3: Clean only after verified scope + dependency ──────────────────
+log "Cleaning verified story worktree..."
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+  git reset --hard HEAD 2>&1 | tee -a "$LOG_FILE"
+  git clean -fd 2>&1 | tee -a "$LOG_FILE"
+  log "Clean slate restored."
+fi
 
-# ─── Phase 4: Build context ─────────────────────────────────────────────────
-# Read ticket doc before selecting specialist skills; it is the authoritative
-# scope and must be available to the skill gate.
-TICKET_DOC=$(pm_read_doc)
-log "Doc length: ${#TICKET_DOC} chars"
+# ─── Phase 4: Claim, then build context ─────────────────────────────────────
+pm_set_status "${ROW_ID}" "in_progress"
+pm_append_doc "${ROW_ID}" "Picked up by W${WORKER_ID}; issue and parent story ${PARENT_RN} context verified"
 
 CONTEXT=""
 
@@ -243,6 +196,9 @@ ${CONTEXT}
 TICKET DOC:
 ${TICKET_DOC}
 
+PARENT STORY DOC:
+${STORY_DOC}
+
 TASK: ${TASK_DESC}
 
 RULES:
@@ -262,11 +218,11 @@ Read relevant source files, then implement the ticket.
 Keep changes minimal. ONE ticket only. Follow existing patterns.
 After each file change, log what you did."
 
-pm_append_doc "Implementation step completed"
+pm_append_doc "${ROW_ID}" "Implementation step completed"
 
 # Step 2: Test, format, lint
-pm_set_status "testing"
-pm_append_doc "Running tests"
+pm_set_status "${ROW_ID}" "testing"
+pm_append_doc "${ROW_ID}" "Running tests"
 
 step "test" "${SHARED}
 
@@ -277,36 +233,34 @@ Run tests:
 4. Fix any errors found.
 Do NOT commit yet."
 
-pm_append_doc "Tests completed"
+pm_append_doc "${ROW_ID}" "Tests completed"
 
 # Step 3: Commit + merge (bash, not LLM)
-pm_set_status "review"
+pm_set_status "${ROW_ID}" "review"
 
 while ! mkdir "$GIT_LOCK" 2>/dev/null; do sleep 2; done
 
 TICKET_TITLE=$(echo "$TASK_DESC" | sed 's/ (row_id=.*//' | cut -c1-72)
 TYPE_COL=$(python3 -c "import json; print(json.load(open('${PROJECT_DIR}/.tmp/agentic-hive/_col_cache.json')).get('Type',''))" 2>/dev/null || echo "")
-TICKET_TYPE=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${ROW_ID}" \
-  -H "$LC_AUTH_HEADER" | \
-  python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('${TYPE_COL}','task'))" 2>/dev/null || echo "task")
+TICKET_TYPE=$(pm_row_type "${ROW_ID}" 2>/dev/null || echo "task")
 
 git add -A 2>/dev/null || true
 git reset HEAD .tmp/ 2>/dev/null || true
 
 if git diff --cached --quiet; then
   log "No changes to commit"
-  pm_append_doc "No changes needed"
+  pm_append_doc "${ROW_ID}" "No changes needed"
 else
   git commit -m "${TICKET_TYPE}-${ROW_ID}: ${TICKET_TITLE}"
   log "Committed ${TICKET_TYPE}-${ROW_ID}"
-  pm_append_doc "Committed ${TICKET_TYPE}-${ROW_ID}"
+  pm_append_doc "${ROW_ID}" "Committed ${TICKET_TYPE}-${ROW_ID}"
 fi
 
 rmdir "$GIT_LOCK" 2>/dev/null || true
 
 # Step 4: Mark merged
-pm_set_status "merged"
-pm_append_doc "W${WORKER_ID} finished"
+pm_set_status "${ROW_ID}" "merged"
+pm_append_doc "${ROW_ID}" "W${WORKER_ID} finished"
 
 # ─── Signal complete ─────────────────────────────────────────────────────────
 # PM status already set to merged — orchestrator will detect via poll

@@ -88,10 +88,11 @@ commits.
 
 ### On Start — Read These First
 
-1. `README.md` — project overview, architecture, tech stack
+1. `README.md` and Compose — project overview, architecture, runtime topology
 2. **Query LatticeCast PM** — use `Skill(developing/project-management)` "Query Tickets" for current status
-3. Any `.tmp/llm*.md` files — design docs, API specs, references
+3. Any `.tmp/llm*.md` files and the parent story/issue docs — design docs, API specs, decisions, and work logs
 4. **Load `Skill(developing/programming)`** + **`Skill(developing/project-management)`**
+5. Trace the source path named by the issue before editing; a symptom alone is not a root cause.
 
 ### Step 1: Identify Parent Story Branch
 
@@ -125,16 +126,47 @@ cd "$STORY_WORKTREE"
 All tickets for this story use this same worktree serially. Tickets from other
 stories may use their own story worktrees in parallel.
 
-### Step 3: Pick Ticket → update status → READ DOC FIRST
-- Query LatticeCast PM for `todo` issues (type=task or type=bug)
-- **Update PM status → `in_progress` FIRST**
-- **READ THE DOC FIRST** via `GET /api/v1/tables/{table_id}/rows/{row_id}/doc`
-  - The doc has ALL implementation detail — what to do, which files, decisions, acceptance criteria
-  - Title is just a short summary — **doc is the real spec**
-  - If a previous bee attempted this ticket, the doc has their work log + what's left
-  - **Follow the doc instructions, not just the title**
-- Append to doc: `- {timestamp} Picked up by W{id}`
-- Work on ONLY that ticket
+### Step 3: Pick Ticket → Read Ticket → Read Story → Then Claim
+- Query LatticeCast PM for `todo` issues (type=task or type=bug).
+- **READ THE COMPLETE ISSUE DOC FIRST** via
+  `GET /api/v1/tables/{table_id}/rows/{issue_row_id}/doc`.
+  - Title is just a short summary — the documents are the specification.
+  - If a previous bee attempted the issue, its doc has the work log and what
+    remains.
+- Resolve its `Parent` from the issue, fetch that parent story row, then
+  **READ THE COMPLETE STORY DOC** via
+  `GET /api/v1/tables/{table_id}/rows/{story_row_id}/doc`.
+  - The story doc is the authoritative root-cause, data-flow, legacy-removal,
+    dependency, and integration specification for the issue.
+  - Reconcile the issue with the story before editing; it may not reintroduce
+    a rejected legacy path or contradict the story's target invariants.
+- Only after both reads and both gates pass, update PM status to `in_progress`.
+- Append to the issue doc: `- {timestamp} Picked up by W{id}; read story-<id> and issue spec`.
+- Work on ONLY that ticket.
+
+### Step 3.1: Ticket Quality Gate — Refuse Incomplete Work
+
+Before changing status or opening a worktree, verify that the issue doc has:
+`## Current Behavior and Evidence`, `## Root Cause`, `## Target Invariants`,
+`## End-to-End Data Flow`, `## Legacy Paths to Remove or Replace`,
+`## Exact Scope`, and `## Acceptance Matrix`. Verify that the parent story doc
+has `## Base Story`, `## Context Read`, `## Current Behavior and Evidence`,
+`## Root Cause`, `## Target Invariants and Data Flow`,
+`## Legacy Paths to Remove or Replace`, and
+`## Issue Dependency and Integration Plan`.
+
+If any section is missing, vague, contradicted by the source, or leaves an
+active legacy path unspecified, **do not implement**. Append the missing
+evidence to the ticket doc, set status to `debugging`, and return it to the
+planner. A bee must never invent a design to make an invalid ticket pass.
+
+### Step 3.2: Parent-Story Gate — Refuse Orphan Issues
+
+Before dispatching any `task` or `bug`, resolve its PM `Parent` field and fetch
+that row. It must exist and have `Type=story`. A missing parent, an epic
+parent, or any non-story parent is a planning error: do not create a worktree,
+do not change the issue to `in_progress`, and do not implement it. Mark it
+`debugging` with the parent failure and return it to the planner.
 
 **IMPORTANT: API uses `row_id` (BIGINT, integer) in URL paths and JSON.
 The v0.40 squash renamed the old `row_number` field to `row_id`; the

@@ -51,6 +51,91 @@ After tickets are created in LatticeCast, detailed notes go to each ticket's doc
 
 Once aligned, create ticket descriptions following these rules:
 
+### Mandatory Ticket Quality Gate — Fail Closed
+
+**Do not create an Epic, Story, or Issue until this gate passes.** A ticket
+title, a list of files, or a user symptom is not a specification. The planner
+must first inspect the relevant current code and record evidence in the design
+and ticket documents. If any required item is unknown, return to Step 1/2;
+do not create a vague ticket and do not start a bee.
+
+Every behavior-changing issue doc MUST contain all of these headings:
+
+1. **Current Behavior and Evidence** — the observed result plus the exact
+   source paths/functions that produce it. Do not infer the cause from the
+   symptom; trace the active path first.
+2. **Root Cause** — the precise incompatible decision or code path, with the
+   evidence that distinguishes it from other plausible causes.
+3. **Target Invariants** — testable statements of what must always be true
+   after the change. State both positive and negative rules.
+4. **End-to-End Data Flow** — for server-backed behavior, trace
+   `UI event → controller → BE/PG/MinIO → response → store → derived GUI`.
+   Identify the source of truth at each persistent boundary.
+5. **Legacy Paths to Remove or Replace** — name every old route, renderer,
+   default writer, compatibility helper, or duplicate flow that conflicts with
+   the target invariant. “Keep for compatibility” is forbidden unless the user
+   explicitly approves that exact path and its coexistence test.
+6. **Exact Scope** — files/functions to change, why each belongs to this
+   behavior, and explicit non-goals. A coherent vertical behavior slice may
+   span controller, backend, UI, and its E2E test; do not split such a slice
+   into independent tickets that leave two implementations active.
+7. **Acceptance Matrix** — concrete API/DB and browser assertions, including
+   the regression that exposed the bug. A visual change requires a Playwright
+   screenshot that is opened and inspected.
+
+The story doc is the full design and root-cause record, not a grouping label.
+Before creating its child issues it MUST contain these headings:
+
+1. **Context Read** — README/Compose, relevant `llm*.md`, existing ticket
+   docs, source call path, database/storage shape when applicable, and nearest
+   E2E tests. This is evidence of reading context, not boilerplate to copy.
+2. **Current Behavior and Evidence** — the user-visible symptom and exact
+   source evidence for the active path.
+3. **Root Cause** — the verified reason the behavior exists; not a guess or
+   a restatement of the symptom.
+4. **Target Invariants and Data Flow** — the final end-to-end flow and which
+   layer owns each state transition.
+5. **Legacy Paths to Remove or Replace** — every conflicting old flow that
+   must disappear, including why leaving it active would violate the target.
+6. **Issue Dependency and Integration Plan** — why every child issue exists,
+   its prerequisite story/issue state, serial order inside the story worktree,
+   and the final story-level acceptance matrix.
+
+An issue doc must cite the relevant story sections and narrow them to its
+single behavioral slice; it must not replace a missing story root-cause design.
+
+**Queen preflight:** before a bee can pick an issue, verify its doc contains
+all seven headings and that its parent story contains `## Base Story` plus all
+six required story-design sections. Missing or contradictory content means the
+ticket is planning-invalid: leave it out of the todo queue, return it to
+planning, and never let a bee guess the missing design.
+
+### Mandatory Parent-Story Rule — Fail Closed
+
+Every executable `task` or `bug` **MUST** have `Parent=<story_row_id>` before
+it is created. The planner must fetch that parent row and verify
+`Type == story`; a missing parent, an epic parent, a task/bug parent, or an
+unverified row ID is invalid. Never create an orphan issue “to fill in later”.
+
+Queen preflight repeats this check before dispatch: it resolves the issue's
+Parent row in PM and accepts it only when the row is a story belonging to the
+same plan. Otherwise the issue is excluded from todo and returned to planning.
+
+### Plan-Phase Parent Audit — Required Before Hive Starts
+
+The planner must keep the row IDs returned as it creates issues, then run the
+same rule-based PM audit before reporting the plan ready or starting a hive:
+
+```bash
+# pm_tool.sh is already sourced; issue IDs are only task/bug rows from this plan.
+pm_validate_issue_parents "${ISSUE_IDS[@]}"
+```
+
+`pm_create_ticket` already rejects a task/bug without a verified story parent.
+This audit catches any incorrectly created or manually edited ticket before a
+queen sees it. An audit failure means the plan remains in planning; do not
+start bees and do not mark the story ready.
+
 ### Default Time Rule
 When creating tickets, if the user does not specify Start Date or Due Date, **default both to today's date**. Never leave date fields empty.
 
@@ -79,6 +164,8 @@ Rules:
 - **Every issue** must have `Parent` pointing to a story (never directly to the epic)
 - Stories are **never** directly implementable — they are groupings only
 - Issues are the only tickets assigned to workers
+- A task/bug without a verified story parent is invalid and must not be written
+  to PM or dispatched to a bee.
 
 ### Mandatory Story Base Rule
 
@@ -104,7 +191,12 @@ dependency.
 - Each issue must be **completable in <15 minutes** by a Claude Sonnet bee
 - Each issue must be **independently testable** — tests must pass after each issue
 - Each issue must be **independently committable** — clean git commit after each
-- Issues should **not conflict** — two workers shouldn't edit the same file
+- An issue owns one coherent behavior, not an arbitrary single file. Include
+  every layer required to make that behavior correct end-to-end; split only at
+  a real, testable behavioral boundary.
+- Concurrent issues should **not conflict** — do not send overlapping files or
+  mutually dependent behavior to separate bees. Put serial, dependent work in
+  the same story worktree.
 - Group stories into phases — Story 1 (scaffold), Story 2 (core), Story 3 (features), etc.
 
 ### Bad Tickets (too big or wrong level)
@@ -152,6 +244,8 @@ After user approves, use `Skill(developing/project-management)`:
 3. Create the **epic first**, note its `row_id`
 4. Create each **story** with `Parent=<epic_row_id>`, note each story's `row_id`
 5. Create each **issue** with `Parent=<story_row_id>` — never parent directly to epic
+   - `pm_create_ticket` rejects `task`/`bug` without a readable `story` parent;
+     do not bypass it with direct row creation.
 6. **Write design content to ticket docs in MinIO** via `PUT /api/v1/tables/{table_id}/rows/{row_id}/doc`:
 
    **Epic doc** — full design overview, architecture decisions, scope:
@@ -183,6 +277,24 @@ After user approves, use `Skill(developing/project-management)`:
    
    ## Spec
    <what this story delivers>
+
+   ## Context Read
+   <README/Compose, llm docs, current code paths, PM docs, tests inspected>
+
+   ## Current Behavior and Evidence
+   <user-visible symptom and exact source paths/functions>
+
+   ## Root Cause
+   <verified cause and why alternatives were excluded>
+
+   ## Target Invariants and Data Flow
+   <UI → controller → BE/PG/MinIO → response → store → derived GUI>
+
+   ## Legacy Paths to Remove or Replace
+   <all conflicting paths; no implicit compatibility retention>
+
+   ## Issue Dependency and Integration Plan
+   <child issue order, shared story branch integration, final acceptance>
    
    ## Files to Change
    - path/to/file.ts — what changes
@@ -212,10 +324,16 @@ After user approves, use `Skill(developing/project-management)`:
    (workers will append here as they work)
    ```
 
-   **CRITICAL**: Every ticket MUST have non-empty doc content after planning. Empty docs = planning failure.
+   **CRITICAL**: Every ticket MUST have non-empty doc content after planning.
+   Before a bee claims an issue it MUST read the issue doc, then its complete
+   parent story doc. Empty docs or an issue read without its story =
+   planning failure.
 
-7. **Delete design docs** `.tmp/llm*.md` — content now lives in ticket docs
-8. Report: **"Created N tickets in LatticeCast. Ready to start `/agentic-hive`?"**
+7. Run `pm_validate_issue_parents` for every task/bug row created by this plan.
+   Any failure keeps the plan in planning; repair the parent/story relation
+   before proceeding.
+8. **Delete design docs** `.tmp/llm*.md` — content now lives in ticket docs
+9. Report: **"Created N tickets in LatticeCast. Ready to start `/agentic-hive`?"**
 
 ## Step 7: Generate Runner Scripts
 
