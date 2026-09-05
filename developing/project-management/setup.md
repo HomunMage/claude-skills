@@ -1,91 +1,51 @@
-# First-Time Setup
+# First-Time PM Setup
 
-Only needed once per project. After setup, use the main skill for daily operations.
-
-## How Auth Works (dev mode)
-
-`.env` has `AUTH_REQUIRED=false`. In this mode:
-- `POST /api/v1/login/password` accepts any password and returns the user's UUID as `access_token`
-- The token IS the `user_id` (UUID) — pass it as `Authorization: Bearer <uuid>` for every subsequent call
-- **Auto-create-user is DISABLED** (since v0.21, to avoid multi-worker INSERT races) — calling an endpoint with an unknown identifier returns 403, NOT an auto-created user
-- New users must be created by an admin via `POST /api/v1/admin/users`
-
-## Setup Sequence
-
-### 1. Ensure running
-```bash
-curl -s http://localhost:13491/api/v1/status 2>/dev/null | grep -q '"ok"'
-```
-
-If not running, tell user:
-> **LatticeCast PM is not running.** Start it:
-> ```bash
-> cd <LatticeCast-repo> && docker compose up -d
-> ```
-
-### 2. Login as admin → get $ADMIN_TOKEN
-
-The admin user must already exist (seeded via DBA on first deploy). Login:
+Do this once per project. Keep credentials and endpoint values in the
+project's ignored `.env`, copied from the skill's `.env.example`.
 
 ```bash
-ADMIN_TOKEN=$(curl -s -X POST http://localhost:13491/api/v1/login/password \
-  -H "Content-Type: application/json" \
-  -d '{"user_name":"<admin_user_name>","password":""}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+set -a; source .env; set +a
+source .agent-skills/developing/project-management/pm_tool.sh
+lc_status
+pm_login
 ```
 
-### 3. Create bot user `claude` (admin-only)
+The PM user must already be registered. Creating users is an admin action;
+password login never creates an identity. A password-login response contains a
+real JWT, not a user-name bearer token.
+
+## Create workspace and PM table
 
 ```bash
-curl -s -X POST http://localhost:13491/api/v1/admin/users \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"user_name":"claude","email":"claude@bot.local","role":"user"}'
+WORKSPACE_NAME=<workspace-name-without-dots>
+TABLE_ID=<pm-table-id>
+WORKSPACE_JSON=$(lc_workspace_create "$WORKSPACE_NAME")
+WORKSPACE_ID=$(printf '%s' "$WORKSPACE_JSON" | python3 -c \
+  'import json,sys; print(json.load(sys.stdin)["workspace_id"])')
+lc_table_create_from_template "$TABLE_ID" "$WORKSPACE_ID"
 ```
 
-### 4. Login as bot → get $TOKEN
+Record `WORKSPACE_ID` and `TABLE_ID` in `.env`. The board is at
+`<web-origin>/<workspace_id>/<table_id>`; derive the web origin from `LC_API`
+instead of embedding a local host in automation. Workspace names must not
+contain `.` because they become part of storage paths.
+
+## Membership
+
+Only an owner can add or change workspace members. Resolve a registered user
+by UUID, user name, or email and add its intended `read`, `write`, or `owner`
+level. The PM helper exposes `lc_workspace_member_add`; use a project-specific
+wrapper when the member identifier is not a user name.
+
+## Verify
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:13491/api/v1/login/password \
-  -H "Content-Type: application/json" \
-  -d '{"user_name":"claude","password":""}' \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+pm_cache_cols
+pm_col Title
+pm_col Type
+pm_col Status
+pm_col Parent
 ```
 
-### 5. Create workspace
-```bash
-PROJECT_NAME="$(basename $(git rev-parse --show-toplevel 2>/dev/null || pwd))"
-WORKSPACE_ID=$(curl -s -X POST http://localhost:13491/api/v1/workspaces \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"workspace_name\": \"${PROJECT_NAME}\"}" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['workspace_id'])")
-# WORKSPACE_ID is a UUID
-```
-
-### 6. Ask user for team members
-Ask: **"Which user IDs should have access? (e.g. lattice, alice@example.com)"**
-
-### 7. Add members
-```bash
-# Each member must already be a registered user. If not, admin creates them first
-# (step 3 pattern). Then add to workspace:
-curl -s -X POST "http://localhost:13491/api/v1/workspaces/${WORKSPACE_ID}/members" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"user_name": "<member_user_name>", "role": "member"}'
-```
-
-### 8. Create PM table
-```bash
-curl -s -X POST http://localhost:13491/api/v1/tables/template/pm \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"name\": \"${PROJECT_NAME}\", \"workspace_id\": \"${WORKSPACE_ID}\"}"
-```
-
-### 9. Report URL
-```
-Project board: http://localhost:13491/${WORKSPACE_ID}/${PROJECT_NAME}
-Views: Table | Sprint Board (Kanban) | Roadmap (Timeline)
-```
+Each command must emit a UUID. Do not start a hive until the PM template,
+workspace membership, and `.env` values are verified.

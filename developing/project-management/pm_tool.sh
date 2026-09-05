@@ -139,7 +139,7 @@ pm_require_story_parent() {
     printf '%s\n' "${parent_id}"
 }
 
-# pm_read_ticket_doc ROW_ID → reads the MinIO-backed PM document for any row.
+# pm_read_ticket_doc ROW_ID → reads the PM template's default doc blob for any row.
 pm_read_ticket_doc() {
     pm_login
     lc_doc_read "${TABLE_ID}" "$1"

@@ -119,6 +119,13 @@ lc_table_create() {
     _lc_curl POST "/tables" "$body" "Content-Type: application/json"
     local rc=$?; rm -f "$body"; return $rc
 }
+lc_table_create_from_template() {
+    # $1=table_id $2=workspace_id $3=template kind (default pm)
+    local body kind="${3:-pm}"
+    body=$(_lc_json "$(printf '{\"table_id\":\"%s\",\"workspace_id\":\"%s\"}' "$1" "$2")")
+    _lc_curl POST "/tables/template/${kind}" "$body" "Content-Type: application/json"
+    local rc=$?; rm -f "$body"; return $rc
+}
 lc_table_delete() { _lc_curl DELETE "/tables/$1"; }
 
 # ── Columns ───────────────────────────────────────────────────────────────
@@ -174,8 +181,53 @@ lc_row_update() {
 }
 lc_row_delete() { _lc_curl DELETE "/tables/$1/rows/$2"; }
 
-# ── Docs ──────────────────────────────────────────────────────────────────
-# Doc endpoints are keyed by row_id (same as row routes).
+# ── Blob cells ────────────────────────────────────────────────────────────
+# Blob cell bodies are addressed separately from row_data metadata.  Use the
+# explicit routes for new integrations.  The default-doc helpers below remain
+# for PM templates, whose ticket doc is their first doc blob column.
+
+# lc_blob_doc_read TID ROW_ID COLUMN_ID
+lc_blob_doc_read() { _lc_curl GET "/tables/$1/rows/$2/blob/$3/doc"; }
+
+# lc_blob_doc_write TID ROW_ID COLUMN_ID [-f FILE]
+# Without -f: reads Markdown from stdin.
+lc_blob_doc_write() {
+    local tid="$1" rid="$2" cid="$3" file=""
+    if [ "${4:-}" = "-f" ] && [ -n "${5:-}" ]; then
+        file="$5"
+    else
+        file=$(mktemp)
+        cat > "$file"
+    fi
+    _lc_curl PUT "/tables/${tid}/rows/${rid}/blob/${cid}/doc" "$file" "Content-Type: text/plain"
+    local rc=$?
+    [ "${4:-}" != "-f" ] && rm -f "$file"
+    return $rc
+}
+
+# lc_blob_upload TID ROW_ID COLUMN_ID FILE
+lc_blob_upload() {
+    _lc_check_env
+    _lc_throttle
+    curl -sf -X PUT "${LC_API}/tables/$1/rows/$2/blob/$3" -H "$LC_AUTH_HEADER" -F "file=@$4"
+}
+
+# lc_blob_download TID ROW_ID COLUMN_ID [OUTPUT_FILE]
+lc_blob_download() {
+    _lc_check_env
+    _lc_throttle
+    if [ -n "${4:-}" ]; then
+        curl -sf "${LC_API}/tables/$1/rows/$2/blob/$3" -H "$LC_AUTH_HEADER" -o "$4"
+    else
+        curl -sf "${LC_API}/tables/$1/rows/$2/blob/$3" -H "$LC_AUTH_HEADER"
+    fi
+}
+
+lc_blob_delete() { _lc_curl DELETE "/tables/$1/rows/$2/blob/$3"; }
+
+# ── Default PM document compatibility ────────────────────────────────────
+# These use /doc intentionally: the backend resolves the first doc blob column
+# in the PM template. Do not use them for a selected application blob column.
 
 lc_doc_read()  { _lc_curl GET "/tables/$1/rows/$2/doc"; }
 

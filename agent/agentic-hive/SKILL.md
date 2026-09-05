@@ -2,7 +2,7 @@
 name: agent/agentic-hive
 description: Start the autonomous multi-agent dev loop — a queen + bees in tmux solving tickets from LatticeCast PM
 argument-hint: plan | running | status
-version: 0.39.3
+version: 0.40.0
 ---
 
 # agentic-hive — Autonomous Dev Loop
@@ -129,13 +129,13 @@ stories may use their own story worktrees in parallel.
 ### Step 3: Pick Ticket → Read Ticket → Read Story → Then Claim
 - Query LatticeCast PM for `todo` issues (type=task or type=bug).
 - **READ THE COMPLETE ISSUE DOC FIRST** via
-  `GET /api/v1/tables/{table_id}/rows/{issue_row_id}/doc`.
+  `pm_read_doc <issue_row_id>` (the PM template's default doc blob).
   - Title is just a short summary — the documents are the specification.
   - If a previous bee attempted the issue, its doc has the work log and what
     remains.
 - Resolve its `Parent` from the issue, fetch that parent story row, then
   **READ THE COMPLETE STORY DOC** via
-  `GET /api/v1/tables/{table_id}/rows/{story_row_id}/doc`.
+  `pm_read_doc <story_row_id>` (the PM template's default doc blob).
   - The story doc is the authoritative root-cause, data-flow, legacy-removal,
     dependency, and integration specification for the issue.
   - Reconcile the issue with the story before editing; it may not reintroduce
@@ -249,7 +249,7 @@ no trigger files are needed.
 - **Story branches base off main.**
 - **Never create issue branches for tickets in a story.** Commit to the
   persistent story branch and process sibling tickets serially.
-- **CRITICAL: Continuously update the ticket doc.** Use `PUT /api/v1/tables/{table_id}/rows/{row_id}/doc` (`row_id`, not the removed `row_number`). Append timestamped entries after EVERY action. Empty doc after work = FAILED.
+- **CRITICAL: Continuously update the ticket doc.** Use `pm_append_doc` / `pm_write_doc` (`row_id`, not the removed `row_number`). They write the PM template's default doc blob. Append timestamped entries after EVERY action. Empty doc after work = FAILED.
 - **CRITICAL: FE changes MUST have `.browser/` snapshot.** Run a Playwright check from `e2e` (`docker compose exec -T e2e python3 -c "..."` connecting via `BROWSER_WS`) — server-side `page.screenshot(path="/output/...")` lands at `.browser/...` on host. If the snapshot looks wrong, fix before committing.
 - **API uses `row_id` (integer) in URL paths**, not the removed UUID row identifier. Example: `PUT /api/v1/tables/{tid}/rows/42`.
 - **NEVER POST new rows to update status.** Always use `PUT /api/v1/tables/{table_id}/rows/{row_id}` to update existing row_data. POST creates a NEW row and therefore a duplicate derived ticket key such as `task-42`. Bees must ONLY update, never create.

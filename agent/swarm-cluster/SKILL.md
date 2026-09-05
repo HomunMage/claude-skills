@@ -1,7 +1,7 @@
 ---
 name: agent/swarm-cluster
 description: Persistent cluster that delegates goal-scoped swarms to agentic hives; use for multi-initiative autonomous delivery and recovery
-version: 0.6.5
+version: 0.6.6
 ---
 
 # swarm-cluster
@@ -24,7 +24,7 @@ cluster-main (interactive agent cli — user chat target)
       └── hive3: queen + bees
 ```
 
-Hierarchy: `cluster > swarms > hive ( epic > story > issue )`
+Hierarchy: `cluster > swarm > hive ( epic > story > issue )`
 
 多層次操作：老闆給 cluster 一個 vision；cluster 切分不同目標交給 swarm；
 swarm 管理一個或多個 hive，讓 queen + bees 完成 hive 內的 epic、story、issue。
@@ -38,7 +38,8 @@ swarm 管理一個或多個 hive，讓 queen + bees 完成 hive 內的 epic、st
 - NEVER run a hive directly. Start a swarm in tmux; the swarm owns its hives.
 - One swarm per independent goal. `SWARM` is a short kebab-case slug.
 - Parallel swarms are OK only when they do not touch overlapping files.
-- If something breaks: tell user to `tmux attach -t cluster-backup`.
+- If something breaks: inspect `cluster-backup` through its pane; do not attach
+  an interactive client to a cluster or swarm session.
 - **Delegate:** Split a vision into independent goals before starting swarms. Do
   not pass an unscoped prompt to a swarm.
 - **Verify:** When a swarm says `DONE`, verify the actual output before
@@ -60,7 +61,7 @@ All cluster and swarm coordination happens in tmux. Start swarm sessions in
 the project root; hive-owned story worktrees remain the responsibility of
 `Skill(agent/agentic-hive)`.
 
-- `cluster-main` starts a swarm and may attach to inspect it.
+- `cluster-main` starts a swarm and inspects its pane with `tmux capture-pane`.
 - A swarm plans, starts, monitors, and stops every hive it owns.
 - `cluster-main` must not kill a swarm tmux session. To stop work, request the
   swarm to stop all its hives; after they stop, the swarm ends its own session.

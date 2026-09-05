@@ -246,7 +246,8 @@ After user approves, use `Skill(developing/project-management)`:
 5. Create each **issue** with `Parent=<story_row_id>` — never parent directly to epic
    - `pm_create_ticket` rejects `task`/`bug` without a readable `story` parent;
      do not bypass it with direct row creation.
-6. **Write design content to ticket docs in MinIO** via `PUT /api/v1/tables/{table_id}/rows/{row_id}/doc`:
+6. **Write design content to ticket docs** with `pm_write_doc`. PM uses its
+   template's default doc blob; do not hand-write a legacy route or storage key:
 
    **Epic doc** — full design overview, architecture decisions, scope:
    ```markdown
@@ -316,6 +317,27 @@ After user approves, use `Skill(developing/project-management)`:
    
    ## What to Do
    <specific implementation instructions>
+
+   ## Current Behavior and Evidence
+   <observed result and traced source path>
+
+   ## Root Cause
+   <verified incompatible path or decision>
+
+   ## Target Invariants
+   <positive and negative rules>
+
+   ## End-to-End Data Flow
+   <UI → controller → BE/PG/MinIO → response → store → derived GUI>
+
+   ## Legacy Paths to Remove or Replace
+   <every conflicting active path, or explicitly state none>
+
+   ## Exact Scope
+   <files/functions and explicit non-goals>
+
+   ## Acceptance Matrix
+   <API/DB and browser assertions, including required visual snapshot>
    
    ## Files
    - path/to/file.ts — exact changes needed
