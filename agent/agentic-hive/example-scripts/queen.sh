@@ -94,15 +94,19 @@ for r in rows:
     # Check if any window contains this row_id
     if ! echo "$ACTIVE_WINDOWS" | grep -q "\-${rn}$"; then
       # No worker windows at all → this ticket is orphaned
-      local cur
-      cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" -H "$AUTH" | \
-        python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['row_data']))" 2>/dev/null)
-      local upd
-      upd=$(echo "$cur" | python3 -c "import sys,json; d=json.load(sys.stdin); d['${SID}']='todo'; print(json.dumps(d))")
-      curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" \
+      # PATCH, not a whole-row PUT: a ticket document is a blob cell, and
+      # handing its descriptor back is rejected. This used to fail invisibly —
+      # curl -s with no -f, output to /dev/null, no status checked — so the
+      # recovery silently did nothing and the ticket stayed stuck.
+      local code
+      code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH \
+        "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" \
         -H "$AUTH" -H "Content-Type: application/json" \
-        -d "{\"row_data\": ${upd}}" > /dev/null
-      log "Recovery: rn=${rn} in_progress → todo (no worker window)"
+        -d "{\"row_data\": {\"${SID}\": \"todo\"}}")
+      case "$code" in
+        2*) log "Recovery: rn=${rn} in_progress → todo (no worker window)" ;;
+        *)  log "Recovery FAILED for rn=${rn}: HTTP ${code}" ;;
+      esac
     fi
   done
 }
@@ -224,33 +228,7 @@ wait_finish() {
   log "Waiting for rows [${ROW_IDS}] to finish (timeout ${TIMEOUT}s)..."
 
   while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
-    sleep 10; ELAPSED=$((ELAPSED + 10))
-
-    # Every 30s, check if any worker tmux windows still exist — if none, workers died
-    if [ $((ELAPSED % 30)) -eq 0 ]; then
-    local WORKER_WINDOWS
-    WORKER_WINDOWS=$(tmux list-windows -t "${SESSION}" -F '#{window_name}' 2>/dev/null | grep "^w[0-9]" || true)
-    if [ -z "$WORKER_WINDOWS" ]; then
-      log "No worker windows alive — resetting stuck tickets to todo"
-      for rn in $ROW_IDS; do
-        local cur_status
-        cur_status=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" -H "$AUTH" 2>/dev/null | \
-          python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('${SID}',''))" 2>/dev/null)
-        if [ "$cur_status" = "in_progress" ] || [ "$cur_status" = "testing" ] || [ "$cur_status" = "review" ]; then
-          local cur
-          cur=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" -H "$AUTH" | \
-            python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['row_data']))" 2>/dev/null)
-          local upd
-          upd=$(echo "$cur" | python3 -c "import sys,json; d=json.load(sys.stdin); d['${SID}']='todo'; print(json.dumps(d))")
-          curl -s -X PUT "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" \
-            -H "$AUTH" -H "Content-Type: application/json" \
-            -d "{\"row_data\": ${upd}}" > /dev/null
-          log "Reset rn=${rn} ${cur_status} → todo (worker window gone)"
-        fi
-      done
-      return 0
-    fi
-    fi
+    sleep 10
 
     local STILL_WORKING
     STILL_WORKING=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows?limit=500&sort=asc" -H "$AUTH" 2>/dev/null | python3 -c "
@@ -266,6 +244,46 @@ for rn in active:
             working.append(rn)
 print(' '.join(working) if working else 'NONE')
 " 2>/dev/null)
+
+    # An empty answer means the query failed, not that the queue is empty --
+    # curl exits non-zero on a DNS blip or a timeout and both redirections
+    # above swallow it. Falling through here treats "PM unreachable" as "still
+    # working", so the loop waits out the whole budget and then reports a
+    # TIMEOUT that never happened and kills the workers over it.
+    if [ -z "$STILL_WORKING" ]; then
+      log "PM unreachable this tick -- not counting it as progress or as a hang"
+      continue
+    fi
+
+    # A tick counts only after PM answered. A host suspend or temporary PM
+    # outage must not consume a worker's 900-second execution budget.
+    ELAPSED=$((ELAPSED + 10))
+
+    # Every 30 successful PM ticks, check whether the worker windows survived.
+    # PM was just read successfully, so it is safe to repair active rows.
+    if [ $((ELAPSED % 30)) -eq 0 ]; then
+      local WORKER_WINDOWS
+      WORKER_WINDOWS=$(tmux list-windows -t "${SESSION}" -F '#{window_name}' 2>/dev/null | grep "^w[0-9]" || true)
+      if [ -z "$WORKER_WINDOWS" ]; then
+        log "No worker windows alive — resetting stuck tickets to todo"
+        for rn in $ROW_IDS; do
+          local cur_status code
+          cur_status=$(curl -s "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" -H "$AUTH" 2>/dev/null | \
+            python3 -c "import sys,json; print(json.load(sys.stdin)['row_data'].get('${SID}',''))" 2>/dev/null)
+          if [ "$cur_status" = "in_progress" ] || [ "$cur_status" = "testing" ] || [ "$cur_status" = "review" ]; then
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH \
+              "${PM_URL}/api/v1/tables/${TABLE_ID}/rows/${rn}" \
+              -H "$AUTH" -H "Content-Type: application/json" \
+              -d "{\"row_data\": {\"${SID}\": \"todo\"}}")
+            case "$code" in
+              2*) log "Reset rn=${rn} ${cur_status} → todo (worker window gone)" ;;
+              *)  log "Reset FAILED for rn=${rn}: HTTP ${code}" ;;
+            esac
+          fi
+        done
+        return 0
+      fi
+    fi
 
     if [ "$STILL_WORKING" = "NONE" ]; then
       log "All workers finished."

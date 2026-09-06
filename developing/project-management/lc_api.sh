@@ -179,6 +179,16 @@ lc_row_update() {
     _lc_curl PUT "/tables/$1/rows/$2" "$body" "Content-Type: application/json"
     local rc=$?; rm -f "$body"; return $rc
 }
+# lc_row_patch TID ROW_ID JSON_BODY — merges the given fields and leaves every
+# other column alone. Prefer it over lc_row_update whenever only some fields
+# change: a whole-row PUT has to carry every value back, and a blob cell's
+# metadata descriptor is rejected on the way in.
+lc_row_patch() {
+    local body; body=$(_lc_json "$3")
+    _lc_curl PATCH "/tables/$1/rows/$2" "$body" "Content-Type: application/json"
+    local rc=$?; rm -f "$body"; return $rc
+}
+
 lc_row_delete() { _lc_curl DELETE "/tables/$1/rows/$2"; }
 
 # ── Blob cells ────────────────────────────────────────────────────────────

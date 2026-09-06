@@ -201,16 +201,22 @@ pm_validate_issue_parents() {
 # ── Row helpers ──────────────────────────────────────────────────────────
 
 # pm_set_status ROW_ID STATUS — patches the Status field on the given row.
+#
+# Sends only Status. It used to read the whole row_data back, edit one key and
+# PUT all of it, which stopped working once a ticket document became a blob
+# cell: row_data then carries a descriptor for it, and the server rejects that
+# descriptor on the way in. endpoints.md is explicit — "PATCH merges non-blob
+# data ... Neither can mutate a blob cell."
 pm_set_status() {
     local rid="$1" status="$2"
     pm_login
     local sid; sid=$(pm_col Status)
-    local cur upd
-    cur=$(lc_row_get "${TABLE_ID}" "${rid}" \
-        | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)['row_data']))")
-    upd=$(printf '%s' "${cur}" \
-        | python3 -c "import sys,json;d=json.load(sys.stdin);d['${sid}']='${status}';print(json.dumps({'row_data':d}))")
-    lc_row_update "${TABLE_ID}" "${rid}" "${upd}" >/dev/null
+    if [ -z "${sid}" ]; then
+        echo "pm_set_status: no Status column in ${TABLE_ID}" >&2
+        return 1
+    fi
+    lc_row_patch "${TABLE_ID}" "${rid}" \
+        "{\"row_data\": {\"${sid}\": \"${status}\"}}" >/dev/null
 }
 
 # pm_create_ticket TITLE TYPE PRIORITY [PARENT_RN]

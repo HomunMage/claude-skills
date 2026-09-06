@@ -3,7 +3,7 @@ name: developing/project-management
 description: LatticeCast PM integration — ticket status updates, project setup, pre-flight checks. Internal library used by developing/programming, agent/agentic-hive, and developing/onboarding.
 user-invocable: false
 allowed-tools: Bash, Read
-version: 0.12.0
+version: 0.12.1
 ---
 
 # LatticeCast Project Management
@@ -48,6 +48,16 @@ pm_get_todo_tasks
 
 The PM user must already exist. Never fabricate `Authorization: Bearer
 <user_name>`; `pm_login` obtains a real access token.
+
+## Every `pm_*` entry point calls `pm_login` itself
+
+`pm_login` is what sets `LC_AUTH_HEADER`; the `lc_*` layer only reads it. Each
+`pm_*` function calls `pm_login` on entry rather than assuming a caller did.
+
+This matters when writing or overriding a helper: reference `LC_AUTH_HEADER`
+without calling `pm_login` first and, under `set -u`, the shell dies on an
+unbound variable. In a hive that surfaces as a bee which logs its first line
+and vanishes, with no error attributable to PM.
 
 ## ID Resolution
 
